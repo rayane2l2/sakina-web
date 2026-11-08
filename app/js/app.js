@@ -1,0 +1,333 @@
+import {applyKnowledgeRows,knowledgeGroups,defaultKnownRange,readKnownRanges,validateKnowledgeRows,priorLearningFields} from './prior-learning.js';
+import {brand} from './brand.js';
+import {bindSpeedControls,openSpeed} from './speed-control.js';
+import {hasUnitAudio} from './matn-corpus.js';
+import {ErrorStreak,SpeechAttempts} from './recitation-feedback.js';
+import {normalizeModel,modelLabel,modelPicker} from './model-choice.js';
+import {unitsFromAyah} from './page-core.js';
+import {learningWords,playbackPage} from './mushaf-learning.js';
+import {listeningProgress,addListeningRound,followUnit} from './listen-flow.js';
+import {macroPlan,completeMacroReview} from './macro-plan.js';
+import {readingView} from './reader-view.js';
+import {learningTargets,listeningGoal,canRecite,canCompleteLesson,recognitionAvailable,textSheets} from './lesson-core.js';
+import {mountMushaf,updateMushaf,updateMushafLearning} from './mushaf-view.js';
+import {StableMistakes,unlockSound,mistakeSound,setSound} from './sounds.js';
+import {loadData,corpora,phonetics,section,findUnit,sectionLabel,pageSizes,pageIndex,pageUnits,quranMacroIndex} from './data.js';
+import {load,save,day,validateBackup} from './storage.js';
+import {wordsStatus} from './alignment.js';
+import {PLAYBACK_SPEEDS,speedLabel} from './playback-speed.js';
+import {AlignmentClient} from './alignment-client.js';
+import {wordHidden} from './word-display.js';
+import {Recognition} from './recognition.js';
+import {nextReadingWord} from './reading-position.js';
+import * as audio from './audio.js';
+let retryFrontierKey=null;
+const mistakes=new StableMistakes(),retryMistakes=new StableMistakes(),errorStreak=new ErrorStreak(),speechAttempts=new SpeechAttempts();
+const alignment=new AlignmentClient();
+const M=window.MEMO,root=document.querySelector('#app');
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const icons={home:'<path d="m3 10 9-7 9 7v10H5V10m4 10v-7h6v7"/>',book:'<path d="M12 5C9 3 5 3 2 4v15c4-1 7 0 10 2 3-2 6-3 10-2V4c-3-1-7-1-10 1zm0 0v16"/>',layers:'<path d="m12 3 10 6-10 6L2 9zm-9 11 9 5 9-5M3 18l9 5 9-5"/>',settings:'<path d="M4 5h16M4 12h16M4 19h16"/><circle cx="8" cy="5" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="9" cy="19" r="2"/>',mic:'<rect x="8" y="2" width="8" height="13" rx="4"/><path d="M5 10v2a7 7 0 0 0 14 0v-2m-7 9v3m-4 0h8"/>',play:'<path d="m8 4 13 8-13 8z"/>',arrow:'<path d="M4 12h16m-6-6 6 6-6 6"/>',check:'<path d="m5 12 4 4L20 5"/>'};
+const icon=(name,cls='')=>`<svg class="icon ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name]||icons.book}</svg>`;
+let db=load(),view='home',libraryCorpus='quran',search='',reader={corpus:'quran',sid:'1',page:1,index:0,hidden:false,reveal:false},session=null,recognition=new Recognition(db.settings.recognitionModel),voice={status:'idle',text:'',final:false,result:null},playing=null,repeatNow=0,installPrompt=null,offlineBusy=false;
+audio.setSpeed(db.settings.playbackRate);
+const stateSave=()=>{try{save(db);}catch{toast('Stockage plein : exporte une sauvegarde avant de continuer.');}};
+let toastTimer;function toast(text){const el=document.querySelector('#toast');el.textContent=text;el.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),4500);}
+const button=(label,action,cls='',data='')=>`<button class="btn ${cls}" data-action="${action}" ${data}>${label}</button>`;
+const title=(label)=>`<header class="page-title"><h1>${label}</h1></header>`;
+const masthead=()=>`<header class="masthead">${brand()}${button(icon('settings'),'nav','settings-link','data-view="settings" aria-label="Mon espace"')}</header>`;
+const planCache=new WeakMap();
+function prog(p){const date=day(),cached=planCache.get(p.memo);if(cached?.date===date)return cached.value;const value=p.corpus==='quran'?macroPlan(p.memo,date,quranMacroIndex,M):M.plan(p.memo,date);planCache.set(p.memo,{date,value});return value;}
+const totalRevision=p=>{const x=prog(p);return x.recent.length+x.revision.length;};
+function progress(p){const f=M.forecast(p.memo,day());let learned=f.learned,total=f.total,label=corpora[p.corpus].unit+(p.corpus==='quran'?'s':'');
+ if(p.memo.measure==='page'){const weight=id=>p.memo.sizes?.[id]??1;total=p.memo.units.reduce((n,id)=>n+weight(id),0);learned=p.memo.units.filter(id=>p.memo.items[id]).reduce((n,id)=>n+weight(id),0);label='pages';}
+ const number=v=>p.memo.measure==='page'?Number(v.toFixed(2)).toLocaleString('fr'):v;
+ return `<div class="progress" role="progressbar" aria-label="Progression de ${esc(p.name)}" aria-valuenow="${learned}" aria-valuemin="0" aria-valuemax="${total}"><i style="width:${100*learned/Math.max(.0001,total)}%"></i></div><div class="spread small muted"><span>${number(learned)} / ${number(total)} ${label}</span><span>${Math.round(100*learned/Math.max(.0001,total))} %</span></div>`;}
+function nav(){return `<nav class="nav" aria-label="Navigation principale">${[['home','home','Aujourd’hui'],['library','book','Bibliothèque'],['programs','layers','Programmes']].map(([id,i,label])=>`<button data-action="nav" data-view="${id}" ${view===id?'aria-current="page"':''}>${icon(i)}<span>${label}</span></button>`).join('')}</nav>`;}
+let stageSize={width:350,height:350};
+function simpleLearning(){return Boolean(session&&session.current.kind==='new');}
+function printedLearning(){return simpleLearning()&&currentCorpus()==='quran';}
+function learningAppearance(){
+ if(!printedLearning())return null;
+ const memo=session.program.memo;let appearance=session.pageAppearance;
+ if(!appearance||appearance.memo!==memo||appearance.step!==session.index){
+  const known=Object.keys(memo.items).map(id=>findUnit('quran',id)).filter(Boolean);
+  const ids=[...new Set(session.steps.slice(0,session.index+1).filter(s=>s.kind==='new').flatMap(s=>s.ids))];
+  const introduced=ids.map(id=>session.targets?.[id]||findUnit('quran',id)).filter(Boolean);
+  appearance={memo,step:session.index,state:learningWords(known,introduced,currentUnits())};session.pageAppearance=appearance;
+ }
+ return {...appearance.state,activeAyah:session.phase==='listen'&&session.audioRunning?(playing||reader.followId||currentUnits()[0].id):null};
+}
+function readerSheets(){
+ const units=displayUnits();
+ if(simpleLearning()&&currentCorpus()!=='quran'){if(session.phase==='listen')return [{units:[followUnit(units,reader.followId)||units[0]]}];return textSheets(isHidden()?units.map(u=>({...u,text:'…'})):units,stageSize.width,stageSize.height).map(units=>({units}));}
+ if(currentCorpus()==='quran')return [...new Set(units.flatMap(u=>u.pages||[u.page]))].map(page=>({page,units:units.filter(u=>(u.pages||[u.page]).includes(page))}));
+ return textSheets(units,stageSize.width,stageSize.height).map(units=>({units}));
+}
+let layoutObserver;
+function render(){
+ const speedOpen=document.querySelector('#speed-menu')?.open,speedFocused=document.activeElement?.id==='playback-speed';
+ document.body.classList.toggle('reader-open',view==='reader');document.body.classList.toggle('learning-open',view==='reader'&&simpleLearning());document.body.classList.toggle('mushaf-learning',view==='reader'&&printedLearning());layoutObserver?.disconnect();
+ root.innerHTML=`<div class="shell ${view==='reader'?'reading':''}">${view!=='reader'?masthead():''}${view==='home'?home():view==='library'?library():view==='programs'?programs():view==='new'?newProgram():view==='reader'?readerView():settings()}</div>${view!=='reader'?nav():''}`;
+ if(speedOpen){openSpeed();if(speedFocused)document.querySelector('#playback-speed')?.focus();}
+ if(view==='reader'){
+  const stage=document.querySelector('#reader-stage');
+  const mount=()=>{
+   if(view!=='reader'||!stage.isConnected)return;
+   const next={width:stage.clientWidth,height:stage.clientHeight},changed=Math.abs(next.width-stageSize.width)>5||Math.abs(next.height-stageSize.height)>5;stageSize=next;
+   if(currentCorpus()!=='quran'){if(changed){const sheets=readerSheets();reader.sheet=Math.min(reader.sheet||0,sheets.length-1);render();}else fitMatn();return;}
+   const sheets=readerSheets(),sheet=sheets[Math.min(reader.sheet||0,sheets.length-1)];
+   mountMushaf({units:sheet.units,hidden:isHidden(),fullPage:true,revealRecognized:recognitionAvailable(currentCorpus(),session?.current),learning:learningAppearance(),pageNumbers:[sheet.page],statuses:statusesFor(sheet.units),revealedAyahs:reader.revealedAyahs||[],onVerse:id=>{if(!session){reader.anchorId=id;reader.sid=id.split(':')[0];}listen([findUnit('quran',id)]);}});
+  };
+  requestAnimationFrame(mount);layoutObserver=new ResizeObserver(()=>requestAnimationFrame(mount));layoutObserver.observe(stage);
+ }
+}
+function fitMatn(){const page=document.querySelector('.matn-page');if(!page)return;const track=page.querySelector('.lyric-track');let size=30;page.style.fontSize=size+'px';const floor=track?22:17;while(size>floor&&(track?track.scrollHeight>page.clientHeight:page.scrollHeight>page.clientHeight+1)){size--;page.style.fontSize=size+'px';}}
+function isHidden(){return Boolean(reader.hidden&&!reader.reveal);}
+function lessonOptions(){return {listened:session?.listened||0,goal:listeningGoal(session?.program.memo.repeat),needsAudio:Boolean(session&&!session.current.test&&session.current.kind!=='review'&&currentUnits().every(u=>hasUnitAudio(currentCorpus(),u)))};}
+function statusesFor(units){const map=new Map();let i=0;for(const u of currentUnits())for(const w of u.wordRefs||[])map.set(`${w.s}:${w.a}:${w.w}`,voice.result?.words[i++]);return units.flatMap(u=>(u.wordRefs||[]).map(w=>map.get(`${w.s}:${w.a}:${w.w}`)||{word:w.text,status:'waiting'}));}
+function home(){
+ const p=db.programs.find(p=>{const x=prog(p);return x.fresh.length||totalRevision(p);})||db.programs[0],x=p?prog(p):null;
+ const review=db.programs.find(p=>totalRevision(p));
+ return `<h1 class="home-heading">Prends un instant.<br>Il est pour toi.</h1><section class="card today-card"><span class="tag">Ma séance</span>${p?`<h2>${esc(p.name)}</h2><p class="small muted">${x.fresh.length} à apprendre · ${totalRevision(p)} révision${totalRevision(p)>1?'s':''}</p>${button('Commencer '+icon('arrow'),'start','primary block',`data-id="${esc(p.id)}"`)}`:`<h2>Mon premier programme</h2>${button('Créer un programme '+icon('arrow'),'new','primary block')}`}</section>${review?`<section class="home-review"><h2>Révision</h2><button class="review-row" data-action="start" data-id="${esc(review.id)}">${icon('book')}<span>${esc(review.name)}</span>${icon('arrow')}</button></section>`:''}`;
+}
+function programCard(p){const x=prog(p);return `<article class="card program"><span class="tag">${esc(corpora[p.corpus].name)}</span><h3>${esc(p.name)}</h3>${progress(p)}<div class="program-meta"><span>${x.fresh.length} à apprendre</span><span>${totalRevision(p)} à réviser</span></div><div class="spread">${button('Continuer '+icon('arrow'),'start','primary compact',`data-id="${esc(p.id)}"`)}${button('Gérer','edit','text',`data-id="${esc(p.id)}"`)}</div></article>`;}
+function library(){const c=corpora[libraryCorpus];return `${title('Bibliothèque')}<div class="seg library-corpora">${Object.keys(corpora).map(id=>button(corpora[id].name,'corpus',libraryCorpus===id?'selected':'',`data-corpus="${id}"`)).join('')}</div><label class="search">${icon('book')}<input id="search" type="search" placeholder="Rechercher un ${libraryCorpus==='quran'?'chapitre':'passage'}…" value="${esc(search)}"></label>${c.reviewStatus==='needs_review'?'<p class="small muted">Texte importé · relecture à terminer.</p>':''}${libraryCorpus==='quran'?`<div class="page-jump"><label for="page-number">Mushaf · 604 pages</label><div><input type="number" id="page-number" min="1" max="604" value="${reader.page||1}" aria-label="Numéro de page">${button('Ouvrir la page','jump-page','secondary compact')}</div></div>`:''}<div id="section-list">${sectionRows(c)}</div>`;}
+function sectionRows(c){const normalized=s=>s.normalize('NFD').replace(/\p{M}/gu,'').toLowerCase();return c.sections.filter(s=>normalized(s.name+' '+s.ar+' '+s.id).includes(normalized(search))).map(s=>`<button class="section-row" data-action="open-section" data-corpus="${c.id}" data-sid="${s.id}"><span class="surah-number">${s.id}</span><span><b>${esc(s.name)}</b><small>${c.id==='quran'?`${s.units.length} versets · page ${s.units[0].page}`:`${c.unit==='vers'?'Vers':'Passages'} ${s.first}–${s.last} · ${s.units.length} ${c.unit}${c.unit==='passage'&&s.units.length>1?'s':''}`}</small></span><span class="ar section-ar">${esc(s.ar)}</span></button>`).join('')||'<p class="muted">Aucun passage trouvé.</p>';}
+function programs(){return `${title('Programmes')}<div class="section-head">${button('+ Nouveau','new','secondary compact')}</div>${db.programs.map(programCard).join('')||'<p class="muted">Aucun programme.</p>'}`;}
+let draft={corpus:'quran',sid:'114',endSid:'114',pace:2,measure:'ayah',name:'',first:1,last:6,group:2,repeat:5},editing=null;
+function draftUnits(){
+ if(editing){const p=db.programs.find(p=>p.id===editing);return p.memo.units.map(id=>findUnit(p.corpus,id)).filter(Boolean);}
+ const c=corpora[draft.corpus],s=section(draft.corpus,draft.sid),end=section(draft.corpus,draft.endSid||draft.sid);
+ if(draft.corpus==='quran'&&draft.measure==='page'){const first=Number(draft.pageFirst||s.units[0].page),last=Number(draft.pageLast||end.units.at(-1).page);return pageUnits.filter(u=>u.page>=first&&u.page<=last);}
+ return c.sections.slice(c.sections.indexOf(s),c.sections.indexOf(end)+1).flatMap(ch=>ch.units.slice(ch===s?Number(draft.first||1)-1:0,ch===end?Number(draft.last||end.units.length):undefined));
+}
+function currentPriorGroups(){return knowledgeGroups(draftUnits(),draft.corpus,corpora[draft.corpus].sections);}
+function applyPrior(p,form){
+ if(!form.knownRecent)return p;
+ return {...p,memo:applyKnowledgeRows(p.memo,draft.knownRanges||[],p.corpus,corpora[p.corpus].sections,id=>findUnit(p.corpus,id),day(),M)};
+}
+function newProgram(){const c=corpora[draft.corpus],s=section(draft.corpus,draft.sid),end=section(draft.corpus,draft.endSid||draft.sid);return `${title(editing?'Modifier le programme':'Nouveau programme')}<form id="program-form" class="card form-card"><label>Nom du programme<input name="name" maxlength="60" value="${esc(draft.name)}" placeholder="Ex. Mon Juz ‘Amma"></label>${!editing?`<label>Texte<select name="corpus">${Object.values(corpora).map(x=>`<option value="${x.id}" ${x.id===draft.corpus?'selected':''}>${x.name}</option>`).join('')}</select></label><label>${draft.corpus==='quran'?'Sourate':'Chapitre'}<select name="sid">${c.sections.map(x=>`<option value="${x.id}" ${x.id===draft.sid?'selected':''}>${esc(sectionLabel(draft.corpus,x))}</option>`).join('')}</select></label><label>Jusqu’au ${draft.corpus==='quran'?'chapitre':'chapitre'}<select name="endSid">${c.sections.filter(x=>Number(x.id)>=Number(draft.sid)).map(x=>`<option value="${x.id}" ${x.id===(draft.endSid||draft.sid)?'selected':''}>${esc(sectionLabel(draft.corpus,x))}</option>`).join('')}</select></label><div class="two-fields"><label>Du ${c.unit}<input name="first" type="number" min="1" max="${s.units.length}" value="${draft.first}" required></label><label>Au ${c.unit}<input name="last" type="number" min="1" max="${end.units.length}" value="${draft.last}" required></label></div>`:''}<label>Rythme quotidien<select name="measure"><option value="ayah">En ${c.unit.endsWith('s')?c.unit:c.unit+'s'}</option>${draft.corpus==='quran'?`<option value="page" ${draft.measure==='page'?'selected':''}>En portions de page</option>`:''}</select></label>${draft.measure==='page'&&!editing?`<div class="two-fields"><label>De la page<input name="pageFirst" type="number" min="1" max="604" value="${draft.pageFirst||s.units[0].page}"></label><label>À la page<input name="pageLast" type="number" min="1" max="604" value="${draft.pageLast||end.units.at(-1).page}"></label></div><p class="small muted">Le programme porte sur ces pages complètes, découpées en portions de lignes.</p>`:''}<label>Quantité par jour${draft.measure==='page'?`<select name="pace">${M.PAGE_PACES.map((x,i)=>`<option value="${x}" ${x===Number(draft.pace)?'selected':''}>${['¼ de page','⅓ de page','½ page','⅔ de page','1 page','1 page ½','2 pages','3 pages'][i]}</option>`).join('')}</select>`:`<input name="pace" type="number" min="1" max="100" value="${draft.pace}" required>`}</label><div class="two-fields"><label>Écoutes par défaut<input name="repeat" type="number" min="1" max="20" value="${draft.repeat}"></label><label>Groupe de ${draft.measure==='page'?'lignes':(c.unit.endsWith('s')?c.unit:c.unit+'s')}<input name="group" type="number" min="1" max="10" value="${draft.group}"></label></div>${priorLearningFields(draftUnits(),draft.corpus,draft,esc,c.sections)}<button class="btn primary block" type="submit">${editing?'Enregistrer':'Créer mon programme'}</button></form>${button('Retour','nav','text','data-view="programs"')}${editing?button('Supprimer ce programme','delete-program','danger',`data-id="${editing}"`):''}`;}
+function currentUnits(){if(session)return session.current.ids.map(id=>session.targets?.[id]||findUnit(session.corpus,id));if(reader.corpus==='quran')return unitsFromAyah(pageUnits.filter(u=>u.page===reader.page),reader.anchorId);return [section(reader.corpus,reader.sid).units[reader.index]];}
+function displayUnits(){if(!session&&reader.corpus==='quran')return pageUnits.filter(u=>u.page===reader.page);return currentUnits();}
+function displayStatuses(){const byWord=new Map();let i=0;for(const u of currentUnits())for(const w of u.wordRefs||[]){byWord.set(`${w.s}:${w.a}:${w.w}`,voice.result?.words[i++]);}return displayUnits().flatMap(u=>(u.wordRefs||[]).map(w=>byWord.get(`${w.s}:${w.a}:${w.w}`)||{word:w.text,status:'waiting'}));}
+function currentCorpus(){return session?.corpus||reader.corpus;}
+function readerView(){
+ const corpus=currentCorpus(),units=currentUnits(),s=section(corpus,!session?reader.sid:units[0].id.split(':')[0]),sheets=readerSheets();reader.sheet=Math.max(0,Math.min(reader.sheet||0,sheets.length-1));
+ const hidden=isHidden(),sheet=sheets[reader.sheet];
+ return readingView({corpus,title:s.name,subtitle:corpus==='quran'?`Page ${sheet.page} · ${session?'portion du jour':'lecture libre'}`:`${corpora[corpus].unit==='vers'?'Vers':'Passage'} ${units[0].n}${units.length>1?'–'+units.at(-1).n:''} · ${s.name}`,session:Boolean(session),mushaf:printedLearning(),recognitionAllowed:recognitionAvailable(corpus,session?.current),stepTitle:session?.current.label,practiceKind:session?.current.practiceKind||session?.current.kind,stepIndex:session?.index||0,stepCount:session?.steps.length||0,phase:session?.phase,listened:session?.listened||0,listenGoal:session?.listenTarget??listeningGoal(session?.program.memo.repeat),audioRunning:Boolean(session?.audioRunning),needsAudio:lessonOptions().needsAudio,hasAudio:units.every(u=>hasUnitAudio(corpus,u)),hidden,playing,repeatNow,playbackRate:db.settings.playbackRate,recognitionModel:db.settings.recognitionModel,voice,voiceLabel:voiceLabel(),voiceHint:voiceHint(),sheet:reader.sheet,sheets:sheets.length,textHTML:simpleLearning()&&!printedLearning()?(session.phase==='listen'?`<div class="lyric-track">${sheet.units.map(u=>learningText(u,hidden)).join('')}</div>`:sheet.units.map(u=>learningText(u,hidden)).join('')):corpus==='quran'?'':sheet.units.map(u=>verseHTML(corpus,u,hidden)).join(''),bookmarked:db.bookmarks.includes(corpus+'/'+units[0].id),first:corpus==='quran'?reader.page<=1:reader.index===0&&Number(reader.sid)===1,last:corpus==='quran'?reader.page>=604:reader.index>=s.units.length-1&&Number(reader.sid)>=corpora[corpus].sections.length,position:corpus==='quran'?`${reader.page} / 604`:`${corpora[corpus].unit==='vers'?'Vers':'Passage'} ${units[0].n} / ${corpora[corpus].sections.at(-1).last}`},{button,icon,esc});
+}
+function learningText(u,hidden){
+ const text=hidden?'<span class="learning-veil" aria-label="Texte caché"></span>':u.parts&&u.text===u.parts.join(' ')?u.parts.map(esc).join('<br>'):esc(u.text);
+ return `<div class="learning-unit"><p>${text}</p><span class="learning-number">﴿${u.n.toLocaleString('ar')}﴾</span></div>`;
+}
+function verseHTML(corpus,u,hidden){
+ const ref=phonetics[u.id],active=voice.text;
+ let words=u.text.split(/\s+/).filter(Boolean).map(word=>({word,status:'waiting'}));
+ if(corpus==='quran'&&active){const offset=currentUnits().slice(0,currentUnits().findIndex(x=>x.id===u.id)).reduce((n,x)=>n+x.text.split(/\s+/).length,0);if(voice.result)words=voice.result.words.slice(offset,offset+words.length);else if(corpus==='quran'&&ref&&currentUnits().length===1)words=wordsStatus(words.map(w=>w.word),ref.aya_phonemes_list,voice.text,voice.final).words;}
+ return `<div class="verse ${playing===u.id?'playing':''}" data-verse="${u.id}"><button class="verse-audio" ${hasUnitAudio(corpus,u)?'':'disabled'} data-action="listen-verse" data-id="${u.id}" aria-label="Écouter ${corpora[corpus].unit} ${u.n}">${icon('play')}</button><p>${words.map((w,i)=>`<span data-word="${i}" class="word ${w.status} ${wordHidden(hidden,u.wordRefs?`${u.wordRefs[i].s}:${u.wordRefs[i].a}`:u.id,reader.revealedAyahs,w.status,recognitionAvailable(corpus,session?.current))?'veiled':''}">${esc(w.word)}</span>`).join(' ')} <span class="verse-number">${u.n.toLocaleString('ar')}</span></p></div>`;
+}
+function voiceLabel(){return modelLabel(db.settings.recognitionModel)+' · '+({idle:recognition.loaded?'Moteur prêt':'Sur cet appareil',loading:'Chargement du modèle…',listening:'Micro actif',finishing:'Analyse de la fin…',done:'Récitation terminée',file:'Analyse du fichier…',error:'Essai interrompu'})[voice.status];}
+function voiceHint(){if(!session&&voice.status==='listening'&&voice.result?.locating)return 'Récite quelques mots : je cherche ta position sur la page.';return voice.status==='listening'?'Je t’écoute. Récite, puis touche le carré pour terminer.':voice.status==='loading'?'Préparation du modèle local. Le premier chargement peut prendre un moment.':voice.status==='finishing'||voice.status==='file'?'Le modèle écoute et compare les sons…':'Touche le micro, attends « Micro actif », puis commence à réciter.';}
+function feedbackHTML(){if(voice.error)return `<p class="error" role="alert">${esc(voice.error)}</p>`;if(!voice.text)return voice.final?'<p class="muted">Aucun son reconnu. Réessaie dans un endroit calme.</p>':'';return `<div class="legend"><span><i class="green"></i> ✓ Repéré · trait plein</span><span><i class="amber"></i> × À vérifier · zigzag</span></div><p class="small muted">${voice.final?'Compare les repères avec ta récitation.':'Le suivi se précise au fil de la récitation.'}</p>`;}
+function settings(){return `${title('Mon espace')}<section class="card"><span class="tag">HORS CONNEXION</span><h2>Hors connexion</h2>${button('Préparer l’accès hors connexion','offline','primary block',offlineBusy?'disabled':'')}<p id="offline-progress" class="small muted"></p><p class="small muted">Pour le Coran, télécharge les audios des passages souhaités depuis la lecture.</p></section><section class="card form-card">${modelPicker(db.settings.recognitionModel)}<p class="small muted">Deux modèles hors ligne. Pour comparer, teste le même fichier audio avec chacun.</p><h2>Audio</h2><label>Récitateur<select id="reciter">${[['minshawi','Minshawi · murattal'],['husary','Husary · murattal'],['alafasy','Mishary Alafasy']].map(([id,name])=>`<option value="${id}" ${db.settings.reciter===id?'selected':''}>${name}</option>`).join('')}</select></label><label class="sound-choice"><input type="checkbox" id="mistake-sound" ${db.settings.mistakeSound!==false?'checked':''}> Son discret pour les écarts stables</label><label>Répétitions en lecture libre<input type="number" id="repeat" min="1" max="20" value="${db.settings.repeat}"></label></section><section class="card"><h2>Sauvegarde</h2><div class="row">${button('Exporter','export','secondary')}<label class="btn secondary file-label">Importer<input type="file" id="backup-file" accept="application/json" hidden></label></div>${button('Installer Sakina.me','install','text block')}<p class="small muted">Sur iPhone : Safari → Partager → Sur l’écran d’accueil.</p></section><section class="card"><h2>Favoris</h2>${db.bookmarks.length?db.bookmarks.map(key=>{const [c,id]=key.split('/'),u=findUnit(c,id);return u?button(esc(section(c,id.split(':')[0]).name)+' · '+u.n,'open-unit','text block',`data-corpus="${c}" data-id="${id}"`):'';}).join(''):'<p class="muted">Une étoile dans la lecture, et tu retrouves ton passage ici.</p>'}</section><details class="card"><summary>À propos du suivi vocal</summary><p>Zipformer Quran v3 et v3.1 · Quran Lab, via ReciteQuran et le moteur local sherpa-onnx. Reconnaissance des phonèmes en Hafs. Retours expérimentaux, sans validation automatique du tajwid.</p><p>Application personnelle et gratuite. Aucune publicité, aucun compte, aucun envoi d’audio.</p><a href="vendor/LICENSE-ReciteQuran.txt">Conditions ReciteQuran</a> · <a href="THIRD_PARTY_NOTICES.txt">Sources et licences</a></details>`;}
+async function resetVoice(){errorStreak.reset();retryMistakes.reset();mistakes.reset();alignment.reset();await recognition.stop(false);if(voice.status==='error'){recognition.dispose();recognition=new Recognition(db.settings.recognitionModel);attachRecognition();}voice={status:'idle',text:'',final:false};}
+function moveReadingCursor(startWord=null){
+ if(session||currentCorpus()!=='quran')return;
+ reader.voiceStartWord=startWord;alignment.reset();errorStreak.reset();retryMistakes.reset();mistakes.reset();retryFrontierKey=null;
+ const active=recognition.active;
+ recognition.resetSegment();speechAttempts.begin();voice={status:active?'listening':'idle',text:'',final:false,result:null};
+}
+function ensureMode(){if(!recognitionAvailable(currentCorpus(),session?.current))throw Error('La reconnaissance est proposée uniquement en révision et en lecture libre du Coran.');}
+function attachRecognition(){
+ recognition.addEventListener('result',({detail:r})=>{
+  if(view!=='reader')return;voice.text=r.text||r.tokens?.join('')||'';voice.final=r.final;if(r.final)voice.status='done';
+  const units=currentUnits(),corpus=currentCorpus();
+  const referenceWords=[],texts=[];
+  for(const u of units){if(corpus==='quran'&&u.wordRefs){const refs=u.wordRefs.map(w=>phonetics[`${w.s}:${w.a}`]?.aya_phonemes_list[w.w-1]||'');referenceWords.push(...refs);texts.push(...u.text.split(/\s+/));}}
+  alignment.compare({words:texts,referenceWords,heard:voice.text,final:voice.final&&Boolean(session),settled:voice.final,freeReading:!session&&corpus==='quran',startWord:reader.voiceStartWord??null,epoch:recognition.generation},comparison=>{
+  voice.result=comparison;
+  let offset=0;
+  for(const u of units){const els=[...document.querySelectorAll(`[data-verse="${CSS.escape(u.id)}"] .word`)];const ref=phonetics[u.id];
+   els.forEach((el,i)=>{const status=comparison.words[offset+i]?.status||'waiting';el.classList.remove('heard','check','waiting','veiled');el.classList.add(status);const ref=u.wordRefs?.[i],ayah=ref?`${ref.s}:${ref.a}`:u.id;if(wordHidden(isHidden(),ayah,reader.revealedAyahs,status,recognitionAvailable(corpus,session?.current)))el.classList.add('veiled');});offset+=u.text.split(/\s+/).length;
+  }
+  updateMushaf(statusesFor(readerSheets()[reader.sheet||0].units),isHidden());
+  const ordinary=voice.text&&mistakes.inspect(comparison.words,performance.now(),r.final);
+  // Use the spoken frontier, not historical errors earlier on the page.
+  const frontier=comparison.words.findLastIndex(w=>w.status!=='waiting');
+  let strong=false;
+  if(frontier>=0&&speechAttempts.hasEvidence(voice.text)){
+   const word=comparison.words[frontier],refs=units.flatMap(u=>u.wordRefs||[]),ref=refs[frontier];
+   const key=ref?`${ref.s}:${ref.a}:${ref.w}`:String(frontier);
+   if(retryFrontierKey!==key){retryMistakes.reset();retryFrontierKey=key;}
+   if(word.status==='heard')errorStreak.inspect(key,'heard',speechAttempts.id,voice.text);
+   else if(retryMistakes.inspect([word],performance.now(),r.final))strong=errorStreak.inspect(key,word.status,speechAttempts.id,voice.text);
+  }
+  if(strong){mistakeSound(true);navigator.vibrate?.([180,80,180,80,280]);toast('Ce mot accroche : prends le temps de le réécouter.');}
+  else if(ordinary)mistakeSound();
+  updateVoiceDOM();
+  },error=>{voice.error=error;updateVoiceDOM();});
+  updateVoiceDOM();
+ });
+ recognition.addEventListener('error',({detail})=>{voice.error=detail;voice.status='error';recognition.stop(false);updateVoiceDOM();});
+ recognition.addEventListener('level',({detail})=>{if(speechAttempts.level(detail,performance.now(),voice.text))retryMistakes.reset();const el=document.querySelector('#mic-level');if(el)el.style.width=Math.min(100,detail*700)+'%';});
+ recognition.addEventListener('limit',()=>{voice.status='finishing';updateVoiceDOM();});
+}
+function updateVoiceDOM(){const play=document.querySelector('[data-action="listen"], [data-action="lesson-listen"], [data-action="stop-audio"]');if(play){const running=Boolean(playing||session?.audioRunning);play.dataset.action=running?'stop-audio':simpleLearning()?'lesson-listen':'listen';play.setAttribute('aria-label',running?'Arrêter l’écoute':'Écouter le passage');play.innerHTML=running?'<span class="stop-square"></span>':icon('play');}const set=(q,value)=>{const el=document.querySelector(q);if(el)el.textContent=value;};set('#engine-status',voiceLabel());set('#voice-hint',voiceHint());set('#phoneme-output',voice.text);const feedback=document.querySelector('#voice-feedback');if(feedback)feedback.innerHTML=feedbackHTML();const mic=document.querySelector('.mic');const mastery=document.querySelector('[data-action="mastery-confirm"]');if(mastery)mastery.disabled=!canCompleteLesson({...lessonOptions(),busy:Boolean(playing)||['loading','listening','finishing','file'].includes(voice.status)});if(mic){mic.classList.toggle('recording',voice.status==='listening');mic.disabled=['loading','finishing','file'].includes(voice.status);mic.innerHTML=voice.status==='listening'?'<span class="stop-square"></span>':icon('mic');mic.setAttribute('aria-label',voice.status==='listening'?'Arrêter la récitation':'Vérifier avec le micro (facultatif)');}}
+attachRecognition();
+async function openReader(corpus,sid,index=0){stopPlayback();await resetVoice();session=null;reader={corpus,sid,index,page:corpus==='quran'?section(corpus,sid).units[index]?.page||1:null,anchorId:corpus==='quran'?section(corpus,sid).units[index]?.id:null,hidden:false,reveal:false};view='reader';db.last={corpus,sid,index};stateSave();render();window.scrollTo(0,0);}
+async function startProgram(id){
+ const p=db.programs.find(p=>p.id===id);if(!p)return;const x=prog(p),steps=[],targets=learningTargets(p.corpus,x.fresh.map(id=>findUnit(p.corpus,id))),byId=Object.fromEntries(targets.map(u=>[u.id,u]));
+ for(const step of (targets.length?M.learningSteps(targets.map(u=>u.id),p.memo.group):[])){
+  const first=byId[step.ids[0]].n,last=byId[step.ids.at(-1)].n,label=({single:`${p.corpus==='quran'?'Verset':corpora[p.corpus].unit==='vers'?'Vers':'Passage'} ${first}`,group:`Ensemble · ${first}–${last}`,link:`Relier · ${first}–${last}`,test:'Toute la portion de mémoire'})[step.kind];
+  steps.push({...step,practiceKind:step.kind,kind:'new',label,test:step.kind==='test'});
+ }
+ for(const b of [...x.recent,...x.revision])steps.push({ids:b.ids,kind:'review',label:b.label||'Révision de mémoire',macroRotation:b.macroRotation,test:true});
+ if(!steps.length){toast('Ta séance est terminée pour aujourd’hui.');return;}
+ stopPlayback();await resetVoice();session={program:p,corpus:p.corpus,targets:byId,portionIds:x.fresh,steps,index:0,current:steps[0],listened:0,listenTarget:listeningGoal(p.memo.repeat),audioRunning:false,phase:steps[0].kind==='review'||steps[0].test?'recite':'listen'};
+ reader.reveal=false;reader.hidden=session.phase==='recite';reader.revealedAyahs=[];reader.sheet=0;view='reader';render();if(session.phase==='listen'&&lessonOptions().needsAudio)await listen();
+}
+let listenRun=0;
+function stopPlayback(){listenRun++;audio.stop();if(session)session.audioRunning=false;playing=null;repeatNow=0;}
+async function listen(units=currentUnits(),extra=false){
+ const token=++listenRun,lesson=session,step=session?.current,returnToRecite=session?.phase==='recite';
+ if(session){session.listenTarget??=listeningGoal(session.program.memo.repeat);if(extra||session.listenTarget<=session.listened)session.listenTarget=session.listened+1;session.audioRunning=true;session.phase='listen';reader.followId=units[0]?.id;reader.reveal=true;reader.hidden=false;reader.revealedAyahs=[];}
+ const completePortion=session&&units.length===currentUnits().length&&units.every((u,i)=>u.id===currentUnits()[i].id);
+ const startListened=session?.listened||0;
+ const repeats=session?()=>Math.max(0,lesson.listenTarget-startListened):db.settings.repeat;
+ await resetVoice();voice.status='idle';render();
+ try{
+  await audio.play(currentCorpus(),units,db.settings.reciter,repeats,(u,rep)=>{playing=u?.id||null;repeatNow=rep;if(u&&simpleLearning())followLearningAudio(u.id);if(!u&&session===lesson&&session)session.audioRunning=false;document.querySelectorAll('.verse').forEach(el=>el.classList.toggle('playing',el.dataset.verse===playing));const e=document.querySelector('#listen-status');if(e)e.textContent=u?`Écoute ${rep} · ${corpora[currentCorpus()].unit} ${u.n}`:'Écoute terminée.';updateVoiceDOM();},()=>{if(completePortion&&session===lesson&&session.current===step){session.listened++;updateLessonControls();}},(u,time,duration)=>followLearningTime(u.id,time,duration));
+  if(session&&token===listenRun&&session===lesson&&session.current===step){session.audioRunning=false;if(returnToRecite){session.phase='recite';reader.hidden=true;reader.reveal=false;}render();}
+ }catch(e){if(token===listenRun&&session===lesson){if(session)session.audioRunning=false;render();toast(e.message);}}
+}
+function updateLessonControls(){
+ if(!session)return;const state=listeningProgress(session.listened,session.listenTarget),dots=document.querySelector('#lesson-dots');
+ if(dots){dots.setAttribute('aria-label',`${state.completed} écoutes terminées sur ${state.target}`);while(dots.children.length<state.dots.length)dots.append(document.createElement('i'));while(dots.children.length>state.dots.length)dots.lastElementChild.remove();state.dots.forEach((done,i)=>dots.children[i].classList.toggle('done',done));}
+ const remaining=document.querySelector('#listen-remaining');if(remaining){remaining.textContent=String(state.remaining);remaining.setAttribute('aria-label',`${state.remaining} écoutes restantes`);}
+}
+function followLearningAudio(id){
+ if(!simpleLearning()||session.phase!=='listen')return;
+ const unit=followUnit(currentUnits(),id);if(!unit)return;
+ const changed=reader.followId!==unit.id;reader.followId=unit.id;
+ if(printedLearning()){
+  const page=playbackPage(unit,pageIndex),sheets=readerSheets(),index=sheets.findIndex(s=>s.page===page);
+  if(index>=0&&index!==(reader.sheet||0)){reader.sheet=index;render();}else updateMushafLearning(learningAppearance(),isHidden());
+  return;
+ }
+ const page=document.querySelector('.learning-page');if(!page)return;reader.sheet=0;
+ page.innerHTML=`<div class="lyric-track">${learningText(unit,isHidden())}</div>`;page.scrollTop=0;fitMatn();
+ if(changed&&!matchMedia('(prefers-reduced-motion: reduce)').matches)page.querySelector('.lyric-track').animate([{transform:'translateY(6px)',opacity:.25},{transform:'translateY(0)',opacity:1}],{duration:180,easing:'cubic-bezier(.2,.7,.2,1)'});
+}
+function followLearningTime(id,time,duration){
+ if(!simpleLearning()||session.phase!=='listen'||playing!==id||!Number.isFinite(duration)||duration<=0)return;
+ if(printedLearning()){
+  const unit=followUnit(currentUnits(),id);if(!unit)return;
+  const page=playbackPage(unit,pageIndex,time,duration),index=readerSheets().findIndex(s=>s.page===page);
+  if(index>=0&&index!==(reader.sheet||0)){reader.sheet=index;render();}return;
+ }
+ const page=document.querySelector('.learning-page.lyric-mode'),track=page?.querySelector('.lyric-track');if(!track)return;
+ const overflow=Math.max(0,track.scrollHeight-page.clientHeight),progress=Math.min(1,Math.max(0,(time/duration-.12)/.76));
+ if(overflow)page.scrollTo({top:overflow*progress,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});
+}
+
+async function advanceMastered(){
+ const p=session.program,step=session.current;
+ if(step.kind==='review'){p.memo=M.review(p.memo,step.ids,'good',day());if(p.corpus==='quran')p.memo=completeMacroReview(p.memo,step.macroRotation,day());}
+ if(step.kind==='new'&&step.test)p.memo=M.learn(p.memo,session.portionIds,day());
+ stateSave();session.index++;
+ if(session.index>=session.steps.length){session=null;view='home';render();toast('Séance terminée. Les révisions sont prévues.');return;}
+ session.current=session.steps[session.index];session.listened=0;session.listenTarget=listeningGoal(p.memo.repeat);session.audioRunning=false;session.phase=session.current.test?'recite':'listen';reader.hidden=session.phase==='recite';reader.reveal=false;reader.revealedAyahs=[];reader.sheet=0;render();if(session.phase==='listen'&&lessonOptions().needsAudio)await listen();
+}
+async function action(el){
+ const a=el.dataset.action;
+ if(a==='known-add'||a==='known-remove'){
+  const form=document.querySelector('#program-form'),values=Object.fromEntries(new FormData(form));draft={...draft,...values,knownRecent:form.elements.knownRecent.checked};
+  const groups=currentPriorGroups();draft.knownRanges=readKnownRanges(values,draft,groups);
+  if(a==='known-add'){
+   const used=new Set(draft.knownRanges.map(r=>r.section)),group=groups.find(g=>!used.has(g.id))||groups[0];
+   if(group)draft.knownRanges.push(defaultKnownRange(group));
+  }else{draft.knownRanges.splice(Number(el.dataset.index),1);if(!draft.knownRanges.length)draft.knownRecent=false;}
+  render();return;
+ }
+
+ if(['nav','close-reader','recite','restart-step','stop-audio','mastery-confirm','next','previous'].includes(a))listenRun++;
+ if(a==='reader-menu'){document.querySelector('#reader-menu').showModal();return;}
+ if(a==='close-menu'){document.querySelector('#reader-menu').close();return;}
+ if(a==='sheet-next'||a==='sheet-previous'){reader.sheet=Math.max(0,Math.min(readerSheets().length-1,(reader.sheet||0)+(a==='sheet-next'?1:-1)));render();return;}
+ if(a==='nav'){stopPlayback();await resetVoice();view=el.dataset.view;session=null;render();window.scrollTo(0,0);}
+ if(a==='library-corpus'){libraryCorpus=el.dataset.corpus;search='';view='library';render();}
+ if(a==='corpus'){libraryCorpus=el.dataset.corpus;search='';render();}
+ if(a==='jump-page'){const n=Number(document.querySelector('#page-number').value);if(!Number.isInteger(n)||n<1||n>604){toast('Choisis une page de 1 à 604.');return;}const sid=String(pageIndex[n-1].lines[0].words[0].s);await openReader('quran',sid);reader.page=n;reader.anchorId=null;render();}
+ if(a==='open-section')await openReader(el.dataset.corpus,el.dataset.sid);
+ if(a==='open-unit'){const c=el.dataset.corpus,sid=el.dataset.id.split(':')[0],index=section(c,sid).units.findIndex(u=>u.id===el.dataset.id);await openReader(c,sid,index);}
+ if(a==='new'){editing=null;draft={corpus:'quran',sid:'114',endSid:'114',pace:2,measure:'ayah',name:'',first:1,last:6,group:2,repeat:5};view='new';render();}
+ if(a==='start-first'){if(db.programs.length)await startProgram(db.programs[0].id);else {view='new';render();}}
+ if(a==='start')await startProgram(el.dataset.id);
+ if(a==='edit'){const p=db.programs.find(p=>p.id===el.dataset.id);editing=p.id;draft={corpus:p.corpus,sid:p.sid,name:p.name,pace:p.memo.pace,measure:p.memo.measure,group:p.memo.group,repeat:p.memo.repeat,knownRecent:false};view='new';render();}
+ if(a==='delete-program'){if(confirm('Supprimer ce programme et sa progression ? Pense à exporter une sauvegarde.')){db.programs=db.programs.filter(p=>p.id!==el.dataset.id);stateSave();view='programs';render();}}
+ if(a==='close-reader'){stopPlayback();await resetVoice();session=null;view='home';render();}
+ if(a==='next'||a==='previous'){const delta=a==='next'?1:-1;if(reader.corpus==='quran'){stopPlayback();await resetVoice();reader.page=Math.max(1,Math.min(604,reader.page+delta));reader.anchorId=null;reader.voiceStartWord=null;reader.revealedAyahs=[];reader.sid=String(pageIndex[reader.page-1].lines[0].words[0].s);reader.reveal=false;render();window.scrollTo(0,0);}else{const s=section(reader.corpus,reader.sid),index=reader.index+delta;if(index>=0&&index<s.units.length)await openReader(reader.corpus,reader.sid,index);else{const sid=String(Number(reader.sid)+delta),next=section(reader.corpus,sid);await openReader(reader.corpus,sid,delta>0?0:next.units.length-1);}}}
+ if(a==='show-text'){reader.hidden=false;reader.reveal=true;render();}
+ if(a==='hide-text'){reader.revealedAyahs=[];reader.hidden=true;reader.reveal=false;moveReadingCursor();render();}
+ if(a==='reveal-next'){const units=session?displayUnits():currentUnits(),ids=[...new Set(units.flatMap(u=>u.sources||[u.id]))];reader.revealedAyahs??=[];const next=ids.find(id=>!reader.revealedAyahs.includes(id));if(next){reader.revealedAyahs.push(next);moveReadingCursor(nextReadingWord(units,reader.revealedAyahs));}else toast('Toute la portion est dévoilée.');render();}
+ if(a==='reveal'){reader.reveal=!reader.reveal;render();}
+ if(a==='bookmark'){const key=currentCorpus()+'/'+currentUnits()[0].id;db.bookmarks=db.bookmarks.includes(key)?db.bookmarks.filter(k=>k!==key):[...db.bookmarks,key];stateSave();render();}
+ if(a==='add-listen'){if(!session)return;session.listenTarget=addListeningRound(session.listened,session.listenTarget);updateLessonControls();if(!session.audioRunning)await listen();return;}
+ if(a==='lesson-listen')await listen();
+ if(a==='listen')await listen(undefined,true);
+ if(a==='listen-verse')await listen([findUnit(currentCorpus(),el.dataset.id)]);
+ if(a==='stop-audio'){stopPlayback();playing=null;render();}
+ if(a==='recite'){if(!session)return;stopPlayback();session.listenTarget=session.listened;await resetVoice();session.phase='recite';reader.hidden=true;reader.reveal=false;reader.revealedAyahs=[];render();}
+ if(a==='restart-step'){if(session)await listen(undefined,true);}
+ if(a==='mastery-confirm'){
+  if(!session||!canCompleteLesson({...lessonOptions(),busy:Boolean(playing)||['loading','listening','finishing','file'].includes(voice.status)}))return;
+  stopPlayback();await resetVoice();await advanceMastered();
+ }
+ if(a==='microphone'){
+  stopPlayback();playing=null;if(voice.status==='error')await resetVoice();ensureMode();mistakes.reset();await unlockSound();setSound(db.settings.mistakeSound!==false);
+  if(voice.status==='listening'){voice.status='finishing';updateVoiceDOM();await recognition.stop();return;}
+  alignment.reset();speechAttempts.begin();retryMistakes.reset();voice={status:'loading',text:'',final:false};render();
+  try{await recognition.start();voice.status='listening';updateVoiceDOM();}catch(e){voice.status='error';voice.error=e.name==='NotAllowedError'?'Le microphone n’est pas autorisé. Active-le dans les réglages du navigateur.':e.message;updateVoiceDOM();}
+ }
+ if(a==='download-audio'){const c=currentCorpus();el.disabled=true;try{await audio.download(c,currentUnits(),db.settings.reciter,(i,n)=>el.textContent=`${i} / ${n} audios`);toast('Audios disponibles hors connexion.');}finally{el.disabled=false;el.textContent='Télécharger les audios';}}
+ if(a==='offline')await prepareOffline(el);
+ if(a==='export'){const blob=URL.createObjectURL(new Blob([JSON.stringify(db,null,2)],{type:'application/json'})),a=document.createElement('a');a.href=blob;a.download=`sakina-${day()}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(blob),1000);}
+ if(a==='install'){if(installPrompt){await installPrompt.prompt();installPrompt=null;}else toast('Sur iPhone : Safari → Partager → Sur l’écran d’accueil. Sur Android : menu → Installer l’application.');}
+}
+async function prepareOffline(el){
+ offlineBusy=true;el.disabled=true;
+ try{
+  if('serviceWorker'in navigator)await navigator.serviceWorker.ready;
+  const files=await (await fetch('offline-files.json')).json(),cache=await caches.open('sakina-recite-v21');let count=0;
+  for(const file of files){if(!(await cache.match(file))){const r=await fetch(file);if(!r.ok)throw Error('Téléchargement incomplet : '+file);await cache.put(file,r);}const p=document.querySelector('#offline-progress');if(p)p.textContent=`${++count} / ${files.length} fichiers conservés`;}toast('Textes, moteur, modèle et matn sont prêts hors connexion.');
+ }finally{offlineBusy=false;el.disabled=false;}
+}
+root.addEventListener('click',e=>{const el=e.target.closest('[data-action]');if(el&&!el.disabled)action(el).catch(error=>toast(error.message));});
+bindSpeedControls(root,{getRate:()=>db.settings.playbackRate,onRate:rate=>{db.settings.playbackRate=audio.setSpeed(rate);stateSave();}});
+root.addEventListener('input',e=>{if(e.target.id==='search'){search=e.target.value;document.querySelector('#section-list').innerHTML=sectionRows(corpora[libraryCorpus]);}});
+root.addEventListener('change',async e=>{
+ const el=e.target;
+ try{
+  if(el.closest('#program-form')){draft={...draft,...Object.fromEntries(new FormData(el.form)),knownRecent:el.form.elements.knownRecent?.checked||false};if(el.name==='corpus'){draft.sid=draft.corpus==='quran'?'114':'1';draft.endSid=draft.sid;draft.first=1;draft.last=section(draft.corpus,draft.sid).units.length;draft.measure='ayah';draft.knownRanges=[];draft.knownRecent=false;if(corpora[draft.corpus].type==='prose'){draft.pace=1;draft.group=1;}}if(el.name==='sid'){draft.endSid=draft.sid;draft.first=1;draft.last=section(draft.corpus,draft.sid).units.length;}if(el.name==='endSid'){draft.last=section(draft.corpus,draft.endSid).units.length;}if(el.name==='measure')draft.pace=el.value==='page'?0.5:2;draft.knownRanges=readKnownRanges(Object.fromEntries(new FormData(el.form)),draft,currentPriorGroups());if(draft.knownRecent&&!draft.knownRanges.length)draft.knownRecent=false;render();}
+  if(el.id==='recognition-model'){await resetVoice();recognition.dispose();db.settings.recognitionModel=normalizeModel(el.value);recognition=new Recognition(db.settings.recognitionModel);attachRecognition();stateSave();render();toast(modelLabel(db.settings.recognitionModel)+' sélectionné.');}
+  if(el.id==='mistake-sound'){db.settings.mistakeSound=el.checked;setSound(el.checked);stateSave();}
+  if(el.id==='reciter'){db.settings.reciter=el.value;stateSave();}
+  if(el.id==='repeat'){db.settings.repeat=Math.min(20,Math.max(1,Number(el.value)||3));stateSave();}
+  if(el.id==='audio-file'&&el.files[0]){stopPlayback();alignment.reset();if(voice.status==='error')await resetVoice();ensureMode();mistakes.reset();speechAttempts.begin();retryMistakes.reset();await unlockSound();setSound(db.settings.mistakeSound!==false);voice={status:'file',text:'',final:false};updateVoiceDOM();await recognition.file(el.files[0]);}
+  if(el.id==='backup-file'&&el.files[0]){const next=validateBackup(JSON.parse(await el.files[0].text()));if(confirm('Remplacer les programmes actuels par cette sauvegarde ?')){db=next;db.settings={reciter:'minshawi',repeat:3,...db.settings,playbackRate:audio.setSpeed(db.settings?.playbackRate)};await resetVoice();recognition.dispose();db.settings.recognitionModel=normalizeModel(db.settings.recognitionModel);recognition=new Recognition(db.settings.recognitionModel);attachRecognition();stateSave();render();toast('Sauvegarde importée.');}}
+ }catch(error){voice.error=error.message;if(view==='reader'){voice.status='error';updateVoiceDOM();}toast(error.message);}
+});
+root.addEventListener('submit',e=>{
+ if(e.target.id!=='program-form')return;e.preventDefault();
+ try{
+  const form=Object.fromEntries(new FormData(e.target)),c=corpora[draft.corpus],s=section(draft.corpus,draft.sid);
+  if(form.knownRecent){const groups=currentPriorGroups();draft.knownRanges=readKnownRanges(form,draft,groups);validateKnowledgeRows(draft.knownRanges,groups);}
+  if(editing){const p=db.programs.find(p=>p.id===editing);p.name=form.name.trim()||p.name;p.memo=M.setMeasure(p.memo,form.measure,form.measure==='page'?pageSizes(p.memo.units.map(id=>findUnit('quran',id))):null);p.memo=M.setPace(p.memo,form.pace);p.memo=M.setRepeat(p.memo,form.repeat);p.memo=M.setGroup(p.memo,form.group);}
+  else{const first=Number(form.first),last=Number(form.last),end=section(draft.corpus,form.endSid||draft.sid);if(first<1||first>s.units.length||last<1||last>end.units.length||(s.id===end.id&&first>last))throw Error('Vérifie les limites du passage.');const sections=c.sections.slice(c.sections.indexOf(s),c.sections.indexOf(end)+1);let units=sections.flatMap(x=>x.units.slice(x===s?first-1:0,x===end?last:undefined));if(form.measure==='page'){const from=Number(form.pageFirst),to=Number(form.pageLast);if(from<1||to>604||from>to)throw Error('Vérifie les pages du programme.');units=pageUnits.filter(u=>u.page>=from&&u.page<=to);}const ids=units.map(u=>u.id);db.programs.push({id:crypto.randomUUID(),name:form.name.trim()||(form.measure==='page'?`Pages ${form.pageFirst}–${form.pageLast}`:s.name),corpus:draft.corpus,sid:draft.sid,memo:M.create({units:ids,learn:ids,pace:form.pace,measure:form.measure,sizes:form.measure==='page'?pageSizes(units):null,group:form.group,repeat:form.repeat})});}
+  const target=editing?db.programs.find(p=>p.id===editing):db.programs.at(-1);const updated=applyPrior(target,form);db.programs=db.programs.map(p=>p.id===target.id?updated:p);
+  stateSave();editing=null;view='programs';render();toast('Programme enregistré.');
+ }catch(error){toast(error.message);}
+});
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e;});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){stopPlayback();if(recognition.active){recognition.stop(false);voice.status='idle';voice.error='Micro arrêté pendant la mise en arrière-plan.';updateVoiceDOM();}}});
+try{await loadData();render();}catch(error){root.innerHTML=`<div class="boot"><h1>La bibliothèque n’a pas pu s’ouvrir.</h1><p>${esc(error.message)}</p><button onclick="location.reload()">Réessayer</button></div>`;}

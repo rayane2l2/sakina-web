@@ -1,0 +1,26 @@
+Sakina Recite — personal, free, non-commercial application.
+
+ReciteQuran: https://github.com/Recite-Quran/ReciteQuran
+Browser sherpa-onnx JS wrapper, WASM runtime, tokens and Quran phonetic references are redistributed from that repository. Full original covenant/license: vendor/LICENSE-ReciteQuran.txt. Derivative application must remain free and non-commercial under its pass-through terms. Natlu https://github.com/Recite-Quran/Natlu is the reference app and the official model release distribution used here.
+
+Quran Lab Zipformer Quran v3 INT8, distributed by the Natlu models-latest release:
+https://github.com/Recite-Quran/Natlu/releases/tag/models-latest
+Model SHA256: 6a5ddafa9c5e5c01260d30264031b341785bdc152e9ef1d569b41c8c278508eb
+Model size: 72705392 bytes. Hosted model is split into four byte-exact parts for compatibility with static hosts, then reassembled locally.
+Model family: https://huggingface.co/Quran-Lab/zipformer_p-arabic-v3
+Publisher: https://quranlab.ai/
+Current family license identified by the publisher: Quran-Lab No-Profit License 1.2. No monetization, no authoritative religious verdict. Automatic feedback can be wrong and does not replace a qualified teacher. This app does not claim to run the newer gated v3.2 export. No gated access was bypassed.
+
+Sherpa-onnx: https://github.com/k2-fsa/sherpa-onnx (Apache-2.0).
+ONNX Runtime: https://github.com/microsoft/onnxruntime (MIT).
+Quran text: Tanzil Uthmani, https://tanzil.net — copied unchanged from the user's existing Sakina corpus. No translation or tafsir is included.
+Ibn Ashir text and audio: copied from the user's Sakina assets, including the user-provided video's verse cuts. Audio is available for verses 1–315; verses 316–317 have no supplied audio.
+Book, wordmark and interface identity: existing user-approved Sakina assets.
+Nunito font: SIL Open Font License; Amiri Quran font: SIL Open Font License.
+Capacitor: https://github.com/ionic-team/capacitor (MIT).
+
+Inference runs locally in a dedicated Web Worker. No audio upload, cloud inference, account, analytics or remote database is implemented. Optional Quran listening downloads audio from everyayah.com; after caching it is available offline.
+
+Update 1.1:
+QVP fixed-page geometry and browser engine: Recite-Quran/Natlu, packages/qvp_flutter and assets/pages.tar.xz, as supplied by the user. Used for personal, free, non-commercial memorization with the original printed text and geometry.
+The previously bundled multilingual matn recognizer and Transformers.js/ONNX runtime have been removed from app version 1.3. Only Quran recognition is distributed.

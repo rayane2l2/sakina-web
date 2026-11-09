@@ -37,3 +37,8 @@ La construction conserve le code source et les ressources sans modification ; se
 ## Ressources et conditions
 
 Voir `app/THIRD_PARTY_NOTICES.txt` et les licences conservées dans `app/vendor/`. Le projet inclut des composants soumis à des conditions de gratuité et de non-commercialisation, qui continuent de s'appliquer. Les fichiers sources de travail, PDF personnels, APK, identifiants et données utilisateur ne sont pas inclus dans ce dépôt web.
+
+
+## Version 1.17
+
+Le compteur des écoutes restantes et +1 forment un seul bouton central sur deux lignes, séparé de Réciter.

@@ -204,6 +204,7 @@ function updateLessonControls(){
  if(!session)return;const state=listeningProgress(session.listened,session.listenTarget),dots=document.querySelector('#lesson-dots');
  if(dots){dots.setAttribute('aria-label',`${state.completed} écoutes terminées sur ${state.target}`);while(dots.children.length<state.dots.length)dots.append(document.createElement('i'));while(dots.children.length>state.dots.length)dots.lastElementChild.remove();state.dots.forEach((done,i)=>dots.children[i].classList.toggle('done',done));}
  const remaining=document.querySelector('#listen-remaining');if(remaining){remaining.textContent=String(state.remaining);remaining.setAttribute('aria-label',`${state.remaining} écoutes restantes`);}
+ const add=document.querySelector('[data-action="add-listen"]');if(add)add.setAttribute('aria-label',`Ajouter une écoute · ${state.remaining} écoutes restantes`);
 }
 function followLearningAudio(id){
  if(!simpleLearning()||session.phase!=='listen')return;
@@ -298,7 +299,7 @@ async function prepareOffline(el){
  offlineBusy=true;el.disabled=true;
  try{
   if('serviceWorker'in navigator)await navigator.serviceWorker.ready;
-  const files=await (await fetch('offline-files.json')).json(),cache=await caches.open('sakina-recite-v21');let count=0;
+  const files=await (await fetch('offline-files.json')).json(),cache=await caches.open('sakina-recite-v22');let count=0;
   for(const file of files){if(!(await cache.match(file))){const r=await fetch(file);if(!r.ok)throw Error('Téléchargement incomplet : '+file);await cache.put(file,r);}const p=document.querySelector('#offline-progress');if(p)p.textContent=`${++count} / ${files.length} fichiers conservés`;}toast('Textes, moteur, modèle et matn sont prêts hors connexion.');
  }finally{offlineBusy=false;el.disabled=false;}
 }

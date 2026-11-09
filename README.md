@@ -61,3 +61,7 @@ Révisions consécutives regroupées : une seule récitation avec sourate et bor
 Lecture libre des matns : une écoute par défaut, lecture à la suite depuis le passage affiché et bouton pour écouter le texte entier. Vue de paroles synchronisées avec voisins atténués, sans numéros décoratifs ni petits play dans le texte ; palette bleue. Ibn Ashir possède 315 audios sur 317 vers : les passages sans enregistrement ne bloquent pas la lecture.
 
 Livraisons uniquement web/PWA à partir de cette version, aucun nouvel APK.
+
+### 1.20.1
+
+Correction du rendu du Moukhtassar : un tableau d’hémistiches vide ne masque plus le texte en prose. Les hémistiches d’Ibn Ashir conservent leur présentation. Contrôle automatisé sur tous les passages réels du Moukhtassar sans hémistiches.

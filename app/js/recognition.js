@@ -1,7 +1,7 @@
 import {normalizeModel} from './model-choice.js';
 export class Recognition extends EventTarget {
 
- constructor(model='v3'){super();this.model=normalizeModel(model);this.worker=null;this.loaded=false;this.active=false;this.pending=0;this.generation=0;}
+ constructor(model='v3.1'){super();this.model=normalizeModel(model);this.worker=null;this.loaded=false;this.active=false;this.pending=0;this.generation=0;}
 
  emit(type,detail){this.dispatchEvent(new CustomEvent(type,{detail}));}
 

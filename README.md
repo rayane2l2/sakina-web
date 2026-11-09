@@ -47,3 +47,9 @@ Le compteur des écoutes restantes et +1 forment un seul bouton central sur deux
 ## Version 1.18
 
 Onglet Livres : 428 questions de La Réjouissance du Regard, choix des chapitres ou questions, cartes retournables, révisions FSRS-6 (ts-fsrs 5.2.3), historique local IndexedDB et sauvegarde. Les 88 citations coraniques disposent d’extraits audio Minshawi embarqués. La citation 25:58 a été corrigée à la demande de l’utilisateur pour correspondre à sa phonétique et sa référence.
+
+## Version 1.19
+
+Parcours quotidiens, reprises distinctes par programme, sélections par sourates et révision libre des livres. 70 audios de hadiths ajoutés, textes homogènes, révisions FSRS rapprochées (rétention par défaut 95 %). Balayage du mushaf : vers la droite pour avancer, vers la gauche pour revenir. Repère du verset en cours d’écoute.
+
+Notifications locales uniquement dans l’APK Android. Aucun calendrier, serveur de rappels ou fausse notification web en arrière-plan. La PWA n’affiche pas ces réglages Android.

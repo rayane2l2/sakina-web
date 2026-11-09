@@ -1,0 +1,63 @@
+// A saved checkpoint never validates knowledge and never resumes a microphone.
+export function orderedLessonSteps(reviews, learning) {
+  return [...reviews, ...learning];
+}
+export function lessonCheckpoint(session, reader, date) {
+  if (!session) return null;
+  return {
+    date,
+    savedAt: Date.now(),
+    programId: session.program.id,
+    returnView: session.returnView || "home",
+    memoLogLength: session.program.memo.log.length,
+    index: session.index,
+    steps: session.steps,
+    targets: session.targets,
+    portionIds: session.portionIds,
+    listened: session.listened,
+    listenTarget: session.listenTarget,
+    phase: session.phase,
+    sheet: reader.sheet || 0,
+    hidden: reader.hidden,
+    reveal: reader.reveal,
+    revealedAyahs: reader.revealedAyahs || [],
+    followId: reader.followId || null,
+  };
+}
+export function restoreLesson(checkpoint, program, date) {
+  if (
+    !checkpoint ||
+    !program ||
+    checkpoint.date !== date ||
+    checkpoint.programId !== program.id ||
+    checkpoint.memoLogLength !== program.memo.log.length ||
+    !Array.isArray(checkpoint.steps) ||
+    !Number.isInteger(checkpoint.index) ||
+    !checkpoint.steps[checkpoint.index]
+  )
+    return null;
+  const c = checkpoint,
+    current = c.steps[c.index];
+  if (
+    !Array.isArray(current.ids) ||
+    !current.ids.length ||
+    !["new", "review"].includes(current.kind)
+  )
+    return null;
+  return {
+    program,
+    returnView: ["home", "programs", "library"].includes(c.returnView)
+      ? c.returnView
+      : "home",
+    corpus: program.corpus,
+    steps: c.steps,
+    index: c.index,
+    current,
+    targets: c.targets || {},
+    portionIds: c.portionIds || [],
+    listened: Math.max(0, Number(c.listened) || 0),
+    listenTarget: Math.max(0, Number(c.listenTarget) || 0),
+    phase: c.phase === "recite" ? "recite" : "listen",
+    audioRunning: false,
+  };
+}

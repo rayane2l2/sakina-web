@@ -16,7 +16,7 @@ var Module = {
 
 let initialized;
 
-async function init(modelId='v3') {
+async function init(modelId='v3.1') {
 
  if(initialized)return initialized;
 
@@ -28,7 +28,7 @@ async function init(modelId='v3') {
 
   await runtime;
 
-  const base=modelId==='v3.1'?'../models/v3.1/':'../models/';
+  const base='../models/v3.1/';
   const manifestResponse=await fetch(new URL(base+'manifest.json',self.location.href));
 
   if(!manifestResponse.ok)throw Error('Modèle indisponible');

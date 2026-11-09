@@ -42,3 +42,8 @@ Voir `app/THIRD_PARTY_NOTICES.txt` et les licences conservées dans `app/vendor/
 ## Version 1.17
 
 Le compteur des écoutes restantes et +1 forment un seul bouton central sur deux lignes, séparé de Réciter.
+
+
+## Version 1.18
+
+Onglet Livres : 428 questions de La Réjouissance du Regard, choix des chapitres ou questions, cartes retournables, révisions FSRS-6 (ts-fsrs 5.2.3), historique local IndexedDB et sauvegarde. Les 88 citations coraniques disposent d’extraits audio Minshawi embarqués. La citation 25:58 a été corrigée à la demande de l’utilisateur pour correspondre à sa phonétique et sa référence.

@@ -53,3 +53,11 @@ Onglet Livres : 428 questions de La Réjouissance du Regard, choix des chapitres
 Parcours quotidiens, reprises distinctes par programme, sélections par sourates et révision libre des livres. 70 audios de hadiths ajoutés, textes homogènes, révisions FSRS rapprochées (rétention par défaut 95 %). Balayage du mushaf : vers la droite pour avancer, vers la gauche pour revenir. Repère du verset en cours d’écoute.
 
 Notifications locales uniquement dans l’APK Android. Aucun calendrier, serveur de rappels ou fausse notification web en arrière-plan. La PWA n’affiche pas ces réglages Android.
+
+## Version 1.20 — web/PWA
+
+Révisions consécutives regroupées : une seule récitation avec sourate et bornes exactes, y compris à la reprise d’une séance. Les passages disjoints restent distincts. Les mots des fragments imprimés sont alignés une seule fois ; les rotations de révision gardent leurs conditions de validation. Les pages suivent la récitation.
+
+Lecture libre des matns : une écoute par défaut, lecture à la suite depuis le passage affiché et bouton pour écouter le texte entier. Vue de paroles synchronisées avec voisins atténués, sans numéros décoratifs ni petits play dans le texte ; palette bleue. Ibn Ashir possède 315 audios sur 317 vers : les passages sans enregistrement ne bloquent pas la lecture.
+
+Livraisons uniquement web/PWA à partir de cette version, aucun nouvel APK.

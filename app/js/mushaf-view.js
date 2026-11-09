@@ -176,11 +176,11 @@ function redraw() {
         );
       if (masked) continue;
       if (current.playing === `${w.surah}:${w.ayah}`) {
-        c.fillStyle = "#d8e9e1";
+        c.fillStyle = "#e8efff";
         c.beginPath();
         c.roundRect(b.x, b.y, b.width, b.height, 2);
         c.fill();
-        c.strokeStyle = "#0e604e";
+        c.strokeStyle = "#2857b6";
         c.lineWidth = 1;
         c.beginPath();
         c.moveTo(b.x, b.y + b.height);
@@ -242,7 +242,7 @@ function redraw() {
             : status === "check"
               ? "#a32f0c"
               : current.playing === `${w.surah}:${w.ayah}`
-                ? "#0e604e"
+                ? "#2857b6"
                 : "#17253b";
       } else {
         if (!current.fullPage && !lines.has(page.pathLine(p))) continue;

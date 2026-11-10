@@ -24,3 +24,6 @@ body:has(.program-guide){overflow:hidden}.shell:has(.program-guide){height:calc(
 
 /* Native vertical touch scrolling also starts on Quran ink, not only its margin. */
 .reader-stage .continuous-mushaf .page-canvas{touch-action:pan-y!important}.reader-stage .continuous-mushaf .printed-page{max-height:none!important;height:auto!important}.reader-stage .continuous-mushaf{overflow:visible}
+
+/* Keep the selected learning scope readable against its blue background. */
+.guide-scope .btn{font-size:14px!important;color:#425b83}.guide-scope .btn.selected{background:#2859c4!important;color:#fff!important}

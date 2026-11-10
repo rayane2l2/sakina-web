@@ -194,7 +194,7 @@ export function createBooksUI(host) {
       ranges: p?.selection?.ranges?.map((r) => ({ ...r })) || [
         { from: 1, to: 25 },
       ],
-      retention: p?.retention || 0.9,
+      retention: 0.9,
     };
     mode = "form";
     session = null;
@@ -204,7 +204,7 @@ export function createBooksUI(host) {
     if (!form) return;
     draft.name = form.elements.name.value;
     draft.newPerDay = Number(form.elements.newPerDay.value);
-    draft.retention = Number(form.elements.retention.value) / 100;
+    draft.retention = 0.9;
     draft.chapters = [
       ...form.querySelectorAll('[name="chapters"]:checked'),
     ].map((x) => x.value);
@@ -296,14 +296,14 @@ export function createBooksUI(host) {
       )
       .join(
         "",
-      )}</div>${selection === "all" ? '<p class="small muted">Toutes les questions, dans l’ordre du livre.</p>' : selection === "chapters" ? `<div class="qa-choice-list">${ed.chapters.map((ch) => `<label style="${ch.parentId ? "padding-left:16px" : ""}"><input type="checkbox" name="chapters" value="${E(ch.id)}" ${draft.chapters.includes(ch.id) ? "checked" : ""}>${E(ch.title)}</label>`).join("")}</div>` : selection === "individual" ? `<div class="qa-choice-list">${ed.questions.map((q) => `<label><input type="checkbox" name="questions" value="${E(q.id)}" ${draft.ids.includes(q.id) ? "checked" : ""}>${q.number}${q.occurrence > 1 ? " (2e)" : ""} · ${E(q.searchText.slice(0, 90))}</label>`).join("")}</div>` : `<div class="qa-ranges">${draft.ranges.map((r, i) => `<div class="qa-range"><label>De la question<input data-from type="number" min="1" max="${Math.max(...ed.questions.map((q) => q.number))}" value="${r.from}" required></label><label>À la question<input data-to type="number" min="1" max="${Math.max(...ed.questions.map((q) => q.number))}" value="${r.to}" required></label>${draft.ranges.length > 1 ? B("×", "remove-range", "text", `data-index="${i}" aria-label="Retirer cette plage"`) : ""}</div>`).join("")}</div>${B("+ Ajouter une plage", "add-range", "text")}`}<label>Nouvelles questions par jour<input name="newPerDay" type="number" min="0" max="1000" value="${draft.newPerDay}" required></label><details><summary>Réglages de révision</summary><label>Rétention souhaitée<select name="retention">${[0.8, 0.85, 0.9, 0.95, 0.97, 0.99].map((r) => `<option value="${r * 100}" ${r === draft.retention ? "selected" : ""}>${Math.round(r * 100)} %</option>`).join("")}</select></label><p class="small muted">FSRS-6 · étapes d’apprentissage 1 min et 10 min, réapprentissage 10 min. Les échéances s’adaptent à chaque carte.</p></details><p class="small muted">Les révisions dues passent avant les nouvelles questions.</p><button class="btn primary block" type="submit">${editing ? "Enregistrer" : "Créer et commencer"}</button>${B("Réviser librement cette sélection", "practice-draft", "secondary block")}${editing ? `<div class="qa-manage-actions">${B(state().programs.find((p) => p.id === editing)?.paused ? "Réactiver" : "Mettre en pause", "pause", "secondary", `data-id="${E(editing)}"`)}${B("Archiver", "archive", "secondary", `data-id="${E(editing)}"`)}${B("Supprimer ce programme", "delete", "danger", `data-id="${E(editing)}"`)}</div>` : ""}</form>${B("Retour aux livres", "list", "text")}`;
+      )}</div>${selection === "all" ? '<p class="small muted">Toutes les questions, dans l’ordre du livre.</p>' : selection === "chapters" ? `<div class="qa-choice-list">${ed.chapters.map((ch) => `<label style="${ch.parentId ? "padding-left:16px" : ""}"><input type="checkbox" name="chapters" value="${E(ch.id)}" ${draft.chapters.includes(ch.id) ? "checked" : ""}>${E(ch.title)}</label>`).join("")}</div>` : selection === "individual" ? `<div class="qa-choice-list">${ed.questions.map((q) => `<label><input type="checkbox" name="questions" value="${E(q.id)}" ${draft.ids.includes(q.id) ? "checked" : ""}>${q.number}${q.occurrence > 1 ? " (2e)" : ""} · ${E(q.searchText.slice(0, 90))}</label>`).join("")}</div>` : `<div class="qa-ranges">${draft.ranges.map((r, i) => `<div class="qa-range"><label>De la question<input data-from type="number" min="1" max="${Math.max(...ed.questions.map((q) => q.number))}" value="${r.from}" required></label><label>À la question<input data-to type="number" min="1" max="${Math.max(...ed.questions.map((q) => q.number))}" value="${r.to}" required></label>${draft.ranges.length > 1 ? B("×", "remove-range", "text", `data-index="${i}" aria-label="Retirer cette plage"`) : ""}</div>`).join("")}</div>${B("+ Ajouter une plage", "add-range", "text")}`}<label>Nouvelles questions par jour<input name="newPerDay" type="number" min="0" max="1000" value="${draft.newPerDay}" required></label><p class="small muted">Les révisions dues passent avant les nouvelles questions.</p><button class="btn primary block" type="submit">${editing ? "Enregistrer" : "Créer et commencer"}</button>${B("Réviser librement cette sélection", "practice-draft", "secondary block")}${editing ? `<div class="qa-manage-actions">${B(state().programs.find((p) => p.id === editing)?.paused ? "Réactiver" : "Mettre en pause", "pause", "secondary", `data-id="${E(editing)}"`)}${B("Archiver", "archive", "secondary", `data-id="${E(editing)}"`)}${B("Supprimer ce programme", "delete", "danger", `data-id="${E(editing)}"`)}</div>` : ""}</form>${B("Retour aux livres", "list", "text")}`;
   }
   function form(){
     const html=legacyForm(),doc=new DOMParser().parseFromString(html,'text/html'),form=doc.querySelector('form');
     form.querySelector('.qa-book-title')?.remove();
     const stages=[doc.createElement('section'),doc.createElement('section'),doc.createElement('section')];
     for(const child of [...form.children]){let stage=0;if(child.matches('label')&&child.querySelector('[name="newPerDay"]'))stage=1;else if(child.tagName==='DETAILS'||child.matches('[type="submit"],.qa-manage-actions')||child.matches('label')&&child.querySelector('[name="name"]'))stage=2;else if(child.hasAttribute('data-book-action')&&['practice-draft'].includes(child.dataset.bookAction))stage=2;else if(child.classList.contains('small'))stage=1;stages[stage].append(child);}
-    const advanced=stages[2].querySelector('details');if(advanced){const retention=advanced.querySelector('select'),label=advanced.querySelector('label');const input=doc.createElement('input');input.type='number';input.name='retention';input.min='70';input.max='99';input.value=draft.retention*100;retention.replaceWith(input);advanced.replaceWith(label);}
+
     const submit=stages[2].querySelector('[type="submit"]');if(submit)submit.textContent=editing?'Enregistrer':'Lancer mon premier entraînement';
     const select=stages[0].querySelector('.qa-modes');if(select)select.classList.add('guide-scope');
     const heading=['Que veux-tu apprendre dans ce livre ?','Combien de nouvelles questions par jour ?','Ton programme est prêt.'][wizardStep];

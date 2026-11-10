@@ -10,6 +10,7 @@ import { loadBookStudy, saveBookStudy } from "./books-store.js";
 import {
   createPractice,
   practiceAnswer,
+  shufflePractice,
   swipeAnswer,
 } from "./book-practice.js";
 import { speedDialog, speedTrigger } from "./speed-control.js";
@@ -419,7 +420,7 @@ export function createBooksUI(host) {
         }
       : edition.questions.find((q) => q.id === session.questionId);
     const face = session.face === "back";
-    return `<header class="qa-study-head">${B("‹", "book-back", "qa-close", 'aria-label="Retour au menu précédent"')}<div><small>${E(edition.title)}</small><h1>${E(p.name)}</h1></div><span>${session.practice ? `${session.practice.passed.length} / ${session.practice.total}` : `${session.completed + 1} / ${Math.max(session.total, session.completed + 1)}`}</span></header><div class="progress qa-study-progress" role="progressbar" aria-label="Progression de la séance de questions"><i style="width:${session.practice ? (100 * session.practice.passed.length) / session.practice.total : Math.min(100, (100 * session.completed) / Math.max(1, session.total))}%"></i></div><section class="qa-flip-card ${face ? "flipped" : ""}" tabindex="0" role="group" aria-label="Carte question ${q.number}. Appuyez sur Entrée pour la retourner."><div class="qa-card-inner"><div class="qa-face qa-front" ${face ? 'inert aria-hidden="true"' : ""}><div class="qa-card-tag"><span>Question ${q.number}${q.occurrence > 1 ? " (2e)" : ""}</span><span>${session.demo ? "Démonstration" : session.practice ? "Révision libre" : state().cards[cardKey(edition.id, q.id)] ? "Révision" : "Apprendre"}</span></div><div class="qa-card-scroll qa-question-content" tabindex="0" role="region" aria-label="Question défilante" dir="${edition.direction}"><div class="qa-front-content">${frontBlocks(q)}</div></div></div><div class="qa-face qa-back" ${!face ? 'inert aria-hidden="true"' : ""}><div class="qa-card-tag"><span>Question ${q.number}</span><span>Réponse</span></div><div class="qa-card-scroll" tabindex="0" role="region" aria-label="Réponse défilante" dir="${edition.direction}">${blocks(q.back)}</div></div></div></section><footer class="qa-study-footer"><p class="qa-tap-hint" ${face ? "hidden" : ""}>${session.demo ? "Démonstration · aucune réponse enregistrée" : !host.state().settings.bookFlipSeen ? "Touchez la carte pour afficher la réponse." : ""}</p>${session.demo ? B("Passer la démonstration", "skip-demo", "qa-undo") : ""}<div class="qa-ratings ${session.practice ? "qa-practice-ratings" : ""}" ${!face ? "hidden" : ""}>${face ? gradeButtons() : ""}</div>${canUndo() ? B("Annuler", "undo", "qa-undo", 'aria-label="Annuler la dernière réponse"') : ""}</footer>${speedDialog({ playbackRate: host.state().settings.playbackRate }, speedButton)}`;
+    return `<header class="qa-study-head">${B("‹", "book-back", "qa-close", 'aria-label="Retour au menu précédent"')}<div><small>${E(edition.title)}</small><h1>${E(p.name)}</h1></div><div class="qa-study-meta"><span>${session.practice ? `${session.practice.passed.length} / ${session.practice.total}` : `${session.completed + 1} / ${Math.max(session.total, session.completed + 1)}`}</span>${session.practice && !session.demo ? B("Mélanger", "practice-shuffle", "qa-shuffle", `aria-label="Mélanger les cartes restantes" ${session.practice.queue.length < 2 ? "disabled" : ""}`) : ""}</div></header><div class="progress qa-study-progress" role="progressbar" aria-label="Progression de la séance de questions"><i style="width:${session.practice ? (100 * session.practice.passed.length) / session.practice.total : Math.min(100, (100 * session.completed) / Math.max(1, session.total))}%"></i></div><section class="qa-flip-card ${face ? "flipped" : ""}" tabindex="0" role="group" aria-label="Carte question ${q.number}. Appuyez sur Entrée pour la retourner."><div class="qa-card-inner"><div class="qa-face qa-front" ${face ? 'inert aria-hidden="true"' : ""}><div class="qa-card-tag"><span>Question ${q.number}${q.occurrence > 1 ? " (2e)" : ""}</span><span>${session.demo ? "Démonstration" : session.practice ? "Révision libre" : state().cards[cardKey(edition.id, q.id)] ? "Révision" : "Apprendre"}</span></div><div class="qa-card-scroll qa-question-content" tabindex="0" role="region" aria-label="Question défilante" dir="${edition.direction}"><div class="qa-front-content">${frontBlocks(q)}</div></div></div><div class="qa-face qa-back" ${!face ? 'inert aria-hidden="true"' : ""}><div class="qa-card-tag"><span>Question ${q.number}</span><span>Réponse</span></div><div class="qa-card-scroll" tabindex="0" role="region" aria-label="Réponse défilante" dir="${edition.direction}">${blocks(q.back)}</div></div></div></section><footer class="qa-study-footer"><p class="qa-tap-hint" ${face ? "hidden" : ""}>${session.demo ? "Démonstration · aucune réponse enregistrée" : !host.state().settings.bookFlipSeen ? "Touchez la carte pour afficher la réponse." : ""}</p>${session.demo ? B("Passer la démonstration", "skip-demo", "qa-undo") : ""}<div class="qa-ratings ${session.practice ? "qa-practice-ratings" : ""}" ${!face ? "hidden" : ""}>${face ? gradeButtons() : ""}</div>${canUndo() ? B("Annuler", "undo", "qa-undo", 'aria-label="Annuler la dernière réponse"') : ""}</footer>${speedDialog({ playbackRate: host.state().settings.playbackRate }, speedButton)}`;
   }
   function render() {
     return mode === "study"
@@ -479,6 +480,13 @@ export function createBooksUI(host) {
     const a = el.dataset.bookAction;
     try {
       if (a !== "audio") stopAudio();
+      if (a === "practice-shuffle") {
+        if (!session?.practice || session.demo || grading) return;
+        session.practice = shufflePractice(session.practice);
+        prepareCard();
+        refresh();
+        return;
+      }
       if (a === "open-book") {
         const book = catalog.books.find((b) => b.id === el.dataset.book);
         if (book.editions.length === 1) {

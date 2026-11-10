@@ -4,7 +4,18 @@ export function createPractice(ids) {
   if (!queue.length) throw Error("Choisis au moins une question.");
   return { queue, missed: [], passed: [], round: 1, total: queue.length };
 }
-export function practiceAnswer(state, success) {
+function shuffled(ids, random = Math.random) {
+  const queue = [...ids];
+  for (let i = queue.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [queue[i], queue[j]] = [queue[j], queue[i]];
+  }
+  return queue;
+}
+export function shufflePractice(state, random = Math.random) {
+  return { ...state, queue: shuffled(state.queue, random), shuffle: true };
+}
+export function practiceAnswer(state, success, random = Math.random) {
   if (!state.queue.length) return state;
   const [id, ...queue] = state.queue,
     passed = success ? [...state.passed, id] : state.passed,
@@ -12,7 +23,7 @@ export function practiceAnswer(state, success) {
   if (queue.length) return { ...state, queue, passed, missed };
   return {
     ...state,
-    queue: [...missed],
+    queue: state.shuffle ? shuffled(missed, random) : [...missed],
     passed,
     missed: [],
     round: state.round + (missed.length ? 1 : 0),

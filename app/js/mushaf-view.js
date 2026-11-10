@@ -5,14 +5,29 @@ let enginePromise,
   revision = 0,
   current = null;
 const cache = new Map();
+const pendingPages = new Map();
 async function getPage(n) {
   if (cache.has(n)) return cache.get(n);
+  if (pendingPages.has(n)) return pendingPages.get(n);
+  const task = loadPage(n);
+  pendingPages.set(n, task);
+  try {
+    return await task;
+  } finally {
+    pendingPages.delete(n);
+  }
+}
+async function loadPage(n) {
   enginePromise ??= fetch("vendor/qvp_ffi.wasm")
     .then((r) => {
       if (!r.ok) throw Error("Moteur du mushaf indisponible");
       return r.arrayBuffer();
     })
-    .then((bytes) => window.QVP.QvpEngine.init(bytes));
+    .then((bytes) => window.QVP.QvpEngine.init(bytes))
+    .catch((error) => {
+      enginePromise = null;
+      throw error;
+    });
   const engine = await enginePromise,
     response = await fetch(`data/pages/${String(n).padStart(3, "0")}.qvp`);
   if (!response.ok) throw Error("Page du mushaf indisponible");
@@ -139,9 +154,15 @@ export async function mountMushaf({
     }
     redraw();
   } catch (e) {
-    if (token === revision)
+    if (token === revision) {
       host.innerHTML =
-        '<p class="error">Le mushaf n’a pas pu être chargé. Recharge la page ou prépare le mode hors connexion.</p>';
+        '<p class="error">La page du mushaf n’a pas pu se charger.</p><button type="button" class="btn secondary" data-mushaf-retry>Réessayer</button>';
+      host
+        .querySelector("[data-mushaf-retry]")
+        .addEventListener("click", () => {
+          void mountMushaf({ ...config, pageNumbers });
+        });
+    }
     console.error(e);
   }
 }

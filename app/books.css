@@ -128,6 +128,7 @@
   color: #7c8799;
   white-space: nowrap;
 }
+.qa-study-head>.qa-study-meta{flex:0 0 auto;display:grid;justify-items:end;gap:2px;font-size:11px;color:#7c8799;white-space:nowrap}.qa-study-meta .qa-shuffle{background:#edf3ff;border:0;border-radius:9px;color:#2859c4;min-height:30px;padding:4px 8px;font-size:10px;font-weight:800}
 .qa-study-head .qa-close {
   height: 36px;
   width: 36px;

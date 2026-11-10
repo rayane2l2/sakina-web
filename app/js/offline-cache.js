@@ -20,6 +20,8 @@ export function createOfflineStore({
   const base = new URL("./", baseURL),
     inflight = new Map();
   const url = (file) => new URL(file, base).href;
+  const independent = (result) =>
+    result ? { ...result, response: result.response.clone() } : null;
   const expected = (file) => manifest.files?.[file];
   const cacheKey = (file) => {
     const key = new URL(file, base);
@@ -44,7 +46,7 @@ export function createOfflineStore({
   async function ensure(file, { allowNetwork = true } = {}) {
     if (!/^[a-f0-9]{64}$/.test(expected(file) || ""))
       throw Error("Inventaire hors connexion invalide.");
-    if (inflight.has(file)) return inflight.get(file);
+    if (inflight.has(file)) return independent(await inflight.get(file));
     const task = (async () => {
       const stable = await cacheStorage.open(ASSET_CACHE),
         hit = await lookup(file);
@@ -82,7 +84,7 @@ export function createOfflineStore({
     })();
     inflight.set(file, task);
     try {
-      return await task;
+      return independent(await task);
     } finally {
       inflight.delete(file);
     }

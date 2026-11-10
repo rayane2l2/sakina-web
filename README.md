@@ -91,3 +91,8 @@ Nouveau livre questions-réponses français : 233 questions et 13 chapitres, ave
 Les 69 MP3 Guillaume du lot validé par l’utilisateur le 10 novembre 2026 sont importés sans réencodage, après vérification intégrale des SHA-256, du format et des durées. Chaque citation est reliée à une question par son texte arabe et sa page ; les deux occurrences répétées sont distinguées par leur contexte. Les cartes affichent la vocalisation fournie avec le lot. Le texte du PDF est extrait en conservant l’ordre logique des ligatures arabes, sans captures du livre dans les cartes.
 
 118 citations coraniques utilisent les glyphes canoniques déjà présents dans Sakina et des extraits Minshawi délimités selon les mots cités. Les références répétées sont désambiguïsées avec les références françaises du PDF. Aucun audio coranique synthétique. Le PDF source reste hors du site. Textes et médias du nouveau livre sont inclus dans les ressources hors connexion.
+
+
+### Version 1.23.1
+
+Retrait de la mention de la voix sous chaque lecteur de hadith, sur demande de l’utilisateur. Audios et métadonnées conservés ; références des citations coraniques inchangées.

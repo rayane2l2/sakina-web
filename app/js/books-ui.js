@@ -224,9 +224,9 @@ export function createBooksUI(host) {
           ? PLAY_LABEL.replace("Écouter la citation", "Écouter le hadith")
           : PLAY_LABEL,
         accessible = hadith
-          ? `Écouter le hadith ${b.id} avec ${b.voice}`
+          ? `Écouter le hadith`
           : `Écouter la citation ${b.reference} avec Minshawi`;
-      return `<div class="qa-verse-audio">${B(label, "audio", "qa-audio", `data-src="${E(b.audio)}" data-audio-label="${E(label)}" aria-label="${E(accessible)}"`)}<div class="qa-audio-progress" aria-hidden="true"><i></i></div>${speedTrigger({ playbackRate: host.state().settings.playbackRate }, speedButton).replace('id="speed-trigger-value"', "data-speed-value")}<small>${hadith ? `${E(b.voice)} · voix de synthèse` : `${E(b.reference)} · Minshawi`}</small></div>`;
+      return `<div class="qa-verse-audio">${B(label, "audio", "qa-audio", `data-src="${E(b.audio)}" data-audio-label="${E(label)}" aria-label="${E(accessible)}"`)}<div class="qa-audio-progress" aria-hidden="true"><i></i></div>${speedTrigger({ playbackRate: host.state().settings.playbackRate }, speedButton).replace('id="speed-trigger-value"', "data-speed-value")}${hadith ? "" : `<small>${E(b.reference)} · Minshawi</small>`}</div>`;
     });
   }
   function cards(programmes = state().programs) {

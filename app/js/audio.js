@@ -1,3 +1,4 @@
+import { RECITER_AUDIO_FOLDERS } from "./quran-audio-sync.js";
 import { findUnit } from "./data.js";
 import { normalizeSpeed } from "./playback-speed.js";
 const expand = (corpus, units) => {
@@ -6,13 +7,14 @@ const expand = (corpus, units) => {
     .flatMap((u) =>
       u.sources ? u.sources.map((id) => findUnit(corpus, id)) : [u],
     )
-    .filter((u) => u && !seen.has(u.id) && seen.add(u.id));
+    .filter(
+      (u) =>
+        u &&
+        !seen.has(u.playbackIdentity || u.id) &&
+        seen.add(u.playbackIdentity || u.id),
+    );
 };
-const folders = {
-  minshawi: "Minshawy_Murattal_128kbps",
-  husary: "Husary_128kbps",
-  alafasy: "Alafasy_128kbps",
-};
+const folders = RECITER_AUDIO_FOLDERS;
 let active,
   loading,
   run = 0,
@@ -77,6 +79,15 @@ async function loadAudio(url) {
   }
 }
 export function audioURL(corpus, unit, reciter = "minshawi") {
+  if (unit.wordAudioURL) {
+    if (
+      !/^https:\/\/audio\.qurancdn\.com\/wbw\/\d{3}_\d{3}_\d{3}\.mp3$/.test(
+        unit.wordAudioURL,
+      )
+    )
+      throw Error("Source audio du mot invalide.");
+    return unit.wordAudioURL;
+  }
   if (corpus !== "quran") {
     if (!unit.audio) return null;
     const url = new URL(unit.audio, location.href);
@@ -141,6 +152,12 @@ export async function play(
           player = new Audio(blob);
         active = player;
         setSpeed(speed);
+        let frame = null;
+        const tick = () => {
+          if (token !== run || player.paused) return;
+          onTime(unit, player.currentTime, player.duration);
+          frame = globalThis.requestAnimationFrame?.(tick);
+        };
         player.onplaying = () => {
           if (token === run) {
             if (clip?.player === player) {
@@ -149,6 +166,9 @@ export async function play(
             }
             onStep(unit, r + 1);
             onTime(unit, player.currentTime, player.duration);
+            if (frame !== null) globalThis.cancelAnimationFrame?.(frame);
+            if (globalThis.requestAnimationFrame)
+              frame = requestAnimationFrame(tick);
           }
         };
         player.ontimeupdate = () => {
@@ -222,6 +242,7 @@ export async function play(
           if (token === run) throw error;
           return;
         } finally {
+          if (frame !== null) globalThis.cancelAnimationFrame?.(frame);
           if (clip?.player === player) clearClip();
           if (token === run) cancelPlayback = null;
           player.onended =

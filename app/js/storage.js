@@ -1,3 +1,4 @@
+import { wordVoice } from "./quran-audio-sync.js";
 import { quranReadingMode, quranTextSize } from "./quran-reading.js";
 import { validateBookStudy } from "./books-core.js";
 import { supportedCorpus } from "./matn-corpus.js";
@@ -10,6 +11,7 @@ const empty = () => ({
   bookmarks: [],
   settings: {
     reciter: "minshawi",
+    wordVoice: "quran-com",
     quranReadingMode: "mushaf",
     quranTextSize: 40,
     repeat: 1,
@@ -33,6 +35,7 @@ export function load() {
     s.settings = {
       ...empty().settings,
       ...s.settings,
+      wordVoice: wordVoice(s.settings?.wordVoice),
       recognitionModel: normalizeModel(s.settings?.recognitionModel),
       playbackRate: normalizeSpeed(s.settings?.playbackRate),
       quranReadingMode: quranReadingMode(s.settings?.quranReadingMode),

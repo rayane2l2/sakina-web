@@ -1,9 +1,9 @@
 {
-  "source": "cpfair/quran-align release-2016-11-24",
+  "source": "https://github.com/cpfair/quran-align/releases/tag/release-2016-11-24",
   "license": "CC BY 4.0",
   "licenseFile": "vendor/LICENSE-quran-align-data.txt",
-  "recitation": "EveryAyah Minshawy_Murattal_128kbps",
+  "recitation": "Minshawy_Murattal_128kbps",
   "availableWords": 77344,
   "unavailableWords": 94,
-  "method": "Only unique single-word segments; unavailable boundaries remain null."
+  "method": "Unique word intervals; explicit mapping to QVP words and introductory basmala offsets."
 }

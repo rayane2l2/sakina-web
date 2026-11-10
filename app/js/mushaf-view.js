@@ -39,6 +39,7 @@ export async function mountMushaf({
   revealRecognized = false,
   learning = null,
   playing = null,
+  playingWord = null,
 }) {
   const host = document.querySelector("#printed-mushaf");
   if (!host) return;
@@ -54,6 +55,7 @@ export async function mountMushaf({
     revealRecognized,
     learning,
     playing,
+    playingWord,
     canvases: [],
   };
   const config = current;
@@ -164,6 +166,7 @@ function redraw() {
       continue;
     }
     canvas.dataset.playingAyah = current.playing || "";
+    canvas.dataset.playingWord = current.playingWord || "";
     for (const w of chosen) {
       const status = states.get(`${w.surah}:${w.ayah}:${w.word}`) || "waiting";
       const b = wordBand(page, w),
@@ -175,7 +178,7 @@ function redraw() {
           current.revealRecognized,
         );
       if (masked) continue;
-      if (current.playing === `${w.surah}:${w.ayah}`) {
+      if (current.playingWord === `${w.surah}:${w.ayah}:${w.word}`) {
         c.fillStyle = "#e8efff";
         c.beginPath();
         c.roundRect(b.x, b.y, b.width, b.height, 2);
@@ -241,7 +244,7 @@ function redraw() {
             ? "#003e6d"
             : status === "check"
               ? "#a32f0c"
-              : current.playing === `${w.surah}:${w.ayah}`
+              : current.playingWord === `${w.surah}:${w.ayah}:${w.word}`
                 ? "#2857b6"
                 : "#17253b";
       } else {
@@ -296,7 +299,12 @@ function drawLearning(entry, c, paths) {
     if (wi >= 0) {
       const state = states.get(wi);
       if (state === "hidden") continue;
-      c.fillStyle = state === "future" ? "#c3cad5" : "#17253b";
+      c.fillStyle =
+        state === "future"
+          ? "#c3cad5"
+          : state === "active"
+            ? "#2857b6"
+            : "#17253b";
     } else c.fillStyle = "#8b98ae";
     c.fill(paths[p], page.pathEvenOdd(p) ? "evenodd" : "nonzero");
   }
@@ -304,6 +312,7 @@ function drawLearning(entry, c, paths) {
   canvas.dataset.mutedWords = counts.future;
   canvas.dataset.maskedWords = counts.hidden;
   canvas.dataset.activeAyah = current.learning.activeAyah || "";
+  canvas.dataset.activeWord = current.learning.activeWord || "";
 }
 export function updateMushafLearning(learning, hidden) {
   if (current?.learning) {
@@ -326,9 +335,13 @@ export function updateMushaf(statuses, hidden) {
   }
 }
 
-export function updateMushafPlayback(playing) {
-  if (current && current.playing !== playing) {
+export function updateMushafPlayback(playing, word = null) {
+  if (
+    current &&
+    (current.playing !== playing || current.playingWord !== word)
+  ) {
     current.playing = playing;
+    current.playingWord = word;
     redraw();
   }
 }

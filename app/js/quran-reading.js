@@ -1,3 +1,10 @@
+import {
+  RECITER_AUDIO_FOLDERS,
+  playbackWord,
+  wordRecordings,
+  printedPositions,
+  canonicalPositions,
+} from "./quran-audio-sync.js";
 export const quranReadingMode = (value) =>
   value === "verses" ? "verses" : "mushaf";
 export const quranTextSize = (value) =>
@@ -23,6 +30,8 @@ export function pageVerseUnits(sections, page) {
 export function spokenVerseUnit(unit) {
   const [s, a] = unit.id.split(":").map(Number),
     words = verseTokens(unit).filter((w) => w.position);
+  if (unit.wordRefs?.length)
+    return { ...unit, text: unit.wordRefs.map((w) => w.text).join(" ") };
   return {
     ...unit,
     text: words.map((w) => w.text).join(" "),
@@ -37,21 +46,22 @@ export function verseReadingHTML(
     size = 40,
     pageNavigation = null,
     wordPlaying = null,
+    showHint = true,
   },
   escape,
 ) {
   const e = escape;
-  return `<div class="quran-verse-scroll" tabindex="0" aria-label="Lecture du Coran, verset par verset" style="--quran-text-size:${quranTextSize(size)}px"><div class="quran-verse-help"><p>Touche un mot pour l’écouter. Le bouton Écouter lit le verset entier.</p><div class="verse-size-controls"><span>Taille du texte</span><button type="button" data-action="quran-font" data-delta="-4" aria-label="Réduire la taille du texte" ${quranTextSize(size) <= 28 ? "disabled" : ""}>A−</button><button type="button" data-action="quran-font" data-delta="4" aria-label="Agrandir le texte" ${quranTextSize(size) >= 56 ? "disabled" : ""}>A+</button></div></div>${units
+  return `<div class="quran-verse-scroll" tabindex="0" aria-label="Lecture du Coran, verset par verset" style="--quran-text-size:${quranTextSize(size)}px">${showHint ? '<p class="quran-verse-help">Touche un mot pour l’écouter. ▶ lit le verset.</p>' : ""}${units
     .map((u) => {
       const [sid, n] = u.id.split(":"),
         name = sections.find((s) => String(s.id) === sid)?.name || sid;
-      return `<article class="quran-verse-block" data-verse-key="${e(u.id)}"><header><span>${e(name)} · verset ${e(n)}</span><button type="button" class="verse-listen" data-action="listen-reading-verse" data-id="${e(u.id)}" aria-label="Écouter le verset ${e(n)} de ${e(name)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg> Écouter</button></header><p dir="rtl" lang="ar">${verseTokens(
+      return `<article class="quran-verse-block" data-verse-key="${e(u.id)}"><header><span>${e(name)} · verset ${e(n)}</span><button type="button" class="verse-listen" data-action="listen-reading-verse" data-id="${e(u.id)}" aria-label="Écouter le verset ${e(n)} de ${e(name)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></button></header><p dir="rtl" lang="ar">${verseTokens(
         u,
         resolve(u.id),
       )
         .map((w) =>
           w.position
-            ? `<button type="button" class="quran-word ${wordPlaying === u.id + ":" + w.position ? "is-speaking" : ""}" data-action="listen-word" data-id="${e(u.id)}" data-position="${w.position}" aria-label="Écouter le mot ${e(w.text)}">${e(w.text)}</button>`
+            ? `<button type="button" class="quran-word ${wordPlaying === u.id + ":" + w.position ? "is-speaking" : ""}" data-action="listen-word" data-id="${e(u.id)}" data-position="${w.position}" data-coordinate="${u !== resolve(u.id) && u.wordRefs?.length ? "printed" : "canonical"}" aria-label="Écouter le mot ${e(w.text)}">${e(w.text)}</button>`
             : `<span class="quran-pause">${e(w.text)}</span>`,
         )
         .join(" ")}</p></article>`;
@@ -64,36 +74,90 @@ export class QuranWordAudio {
   constructor(fetcher = (...args) => fetch(...args)) {
     this.fetcher = fetcher;
     this.chapters = new Map();
+    this.loaded = new Map();
   }
-  async range(id, position) {
-    if (
-      !/^\d{1,3}:\d{1,3}$/.test(id) ||
-      !Number.isInteger(position) ||
-      position < 1
-    )
+  async chapter(id, reciter = "minshawi") {
+    if (!/^\d{1,3}:\d{1,3}$/.test(id) || !RECITER_AUDIO_FOLDERS[reciter])
       return null;
     const chapter = Number(id.split(":")[0]);
     if (chapter < 1 || chapter > 114) return null;
-    if (!this.chapters.has(chapter))
+    const key = reciter + ":" + chapter;
+    if (!this.chapters.has(key))
       this.chapters.set(
-        chapter,
+        key,
         this.fetcher(
-          `data/word-audio/minshawi/${String(chapter).padStart(3, "0")}.json`,
+          `data/word-audio/${reciter}/${String(chapter).padStart(3, "0")}.json`,
         )
           .then((r) => {
             if (!r.ok)
               throw Error(
-                "Les repères audio ne sont pas disponibles hors connexion. Télécharge les fichiers avec une connexion.",
+                "Télécharge les fichiers de lecture pour utiliser ces repères hors connexion.",
               );
             return r.json();
           })
+          .then((data) => {
+            if (
+              data.audioFolder &&
+              data.audioFolder !== RECITER_AUDIO_FOLDERS[reciter]
+            )
+              throw Error(
+                "Ces repères ne correspondent pas au récitateur choisi.",
+              );
+            this.loaded.set(key, data);
+            return data;
+          })
           .catch((e) => {
-            this.chapters.delete(chapter);
+            this.chapters.delete(key);
             throw e;
           }),
       );
-    const data = await this.chapters.get(chapter),
-      range = data.verses?.[id]?.[position - 1];
+    return this.chapters.get(key);
+  }
+  async prepare(units, reciter = "minshawi") {
+    const ids = [
+      ...new Set(
+        units
+          .flatMap((u) => u.sources || [u.id])
+          .filter((id) => /^\d+:\d+$/.test(id))
+          .map((id) => id.split(":")[0] + ":1"),
+      ),
+    ];
+    await Promise.all(ids.map((id) => this.chapter(id, reciter)));
+  }
+  cursor(id, time, reciter = "minshawi") {
+    const data = this.loaded.get(reciter + ":" + Number(id.split(":")[0]));
+    return data
+      ? playbackWord(data, id, time)
+      : { canonical: null, printed: null };
+  }
+  async recordings(id, position, coordinate = "canonical") {
+    const data = await this.chapter(id);
+    return data ? wordRecordings(data, id, position, coordinate) : [];
+  }
+  printedFor(id, position) {
+    const data = this.loaded.get("minshawi:" + Number(id.split(":")[0]));
+    return data ? printedPositions(data, id, position) : null;
+  }
+  async positions(id, position, coordinate = "canonical") {
+    const data = await this.chapter(id);
+    if (!data) return { canonical: null, printed: null };
+    const c =
+        coordinate === "printed"
+          ? canonicalPositions(data, id, position)
+          : [position],
+      p =
+        coordinate === "printed"
+          ? [position]
+          : printedPositions(data, id, position);
+    return {
+      canonical: c.length === 1 ? c[0] : null,
+      printed: p.length === 1 ? p[0] : null,
+    };
+  }
+  async range(id, position) {
+    if (!Number.isInteger(position) || position < 1) return null;
+    const data = await this.chapter(id),
+      range = data?.verses?.[id]?.[position - 1];
     return Array.isArray(range) && range.length === 2 && range[1] > range[0]
       ? { start: range[0] / 1000, end: range[1] / 1000 }
       : null;

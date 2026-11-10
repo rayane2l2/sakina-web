@@ -1,0 +1,9 @@
+{
+  "source": "https://github.com/cpfair/quran-align/releases/tag/release-2016-11-24",
+  "license": "CC BY 4.0",
+  "licenseFile": "vendor/LICENSE-quran-align-data.txt",
+  "recitation": "Husary_64kbps",
+  "availableWords": 77382,
+  "unavailableWords": 56,
+  "method": "Unique word intervals; explicit mapping to QVP words and introductory basmala offsets."
+}

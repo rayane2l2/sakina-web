@@ -71,3 +71,14 @@ Correction du rendu du Moukhtassar : un tableau d’hémistiches vide ne masque 
 Nouveau mode de lecture arabe agrandie, taille réglable, sans masquage. Le Mushaf conserve les positions imprimées et place Cacher/Afficher près du lecteur. Les commandes restent fixes et seuls les versets défilent. Un mot se touche pour écouter son extrait Minshawi ; un bouton distinct lit le verset entier. Les ayahs qui traversent une page restent complètes dans cette vue. Aucun texte traduit ou tafsir ajouté.
 
 Les repères mot par mot proviennent des métadonnées Minshawi déjà utilisées par le projet (cpfair/quran-align, CC BY 4.0). 77 344 mots ont un découpage unique, 94 restent indisponibles et proposent l’ayah entière. Les ayahs téléchargées sont réutilisées hors connexion, sans fichiers MP3 par mot supplémentaires ni serveur. Les limites de mots sont issues de l’alignement et ne constituent pas une validation humaine de chaque découpe.
+
+
+## Version 1.22 — lecture fluide et commandes discrètes
+
+Accueil sans programme : Lire le Coran / Apprendre et réviser. Reprise de lecture avec sourate et page. En mode verset, une seule indication courte pour découvrir les mots cliquables ; taille du texte dans le menu, lecture du verset par une icône accessible. Aucun ajout de rangées de commandes explicatives.
+
+Les mots utilisent par défaut les fichiers individuels publics Quran.com (audio.qurancdn.com/wbw), mis en cache à la demande. Téléchargement des mots du passage dans les options ; les extraits Minshawi restent disponibles dans les réglages. Aucun serveur ni secret API ajouté. La documentation officielle distingue ces fichiers de la récitation complète : https://api-docs.quran.com/docs/sdk/javascript/audio/ . Le nom du lecteur mot à mot n’est pas affirmé faute d’identification officielle vérifiée.
+
+Le suivi audio ne surligne que le mot dans son intervalle réel ; les pauses et repères indisponibles restent neutres. Données propres à Minshawy_Murattal_128kbps, Alafasy_128kbps et Husary_64kbps : l’audio Husary utilise donc la version 64 kb/s correspondante. Les six différences de découpage du texte imprimé sont explicitement reliées, sans modifier le texte fourni. Aucun repère d’un récitateur n’est appliqué à un autre.
+
+Révision du Coran : un changement de page conserve le micro et la référence complète de révision. Passage automatique après le dernier mot reconnu de la page. Après un arrêt volontaire, le micro reprend au début de la page affichée ; les mots précédents ne sont pas évalués comme des omissions. Livraison web uniquement.

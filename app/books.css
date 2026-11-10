@@ -792,3 +792,5 @@ body {
 @media(max-width:360px){.quran-verse-scroll{padding:12px}.quran-verse-block header{font-size:10px}.verse-listen{padding:7px;font-size:10px}.reading-layout .btn{font-size:11px}}
 
 .quran-word.is-heard{color:#005b9a;text-decoration:underline;text-underline-offset:7px}.quran-word.is-check{color:#a32f0c;text-decoration:underline wavy;text-underline-offset:7px}.quran-word.is-speaking{color:#174db7;background:#dce8ff;text-decoration:underline}
+
+.first-choices{display:grid;gap:12px}.first-choices .btn{margin:0}.reading-resume{margin:4px 0 18px;background:#f5f8ff!important;border:1px solid #e2e9f7!important;box-shadow:none!important;text-align:left;justify-content:flex-start!important;color:#2859c4!important}.reading-resume small{display:block;margin-top:4px;font-size:11px;font-weight:500;color:#71809a}.quran-size-setting{display:grid;gap:10px;padding:12px 0;color:#71809a;font-size:12px}.quran-size-setting input{width:100%;accent-color:#2859c4}.verse-listen{width:36px;justify-content:center}.verse-listen svg{width:16px;height:16px}

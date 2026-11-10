@@ -1,3 +1,4 @@
+import {QURAN_PLAN_VERSION} from './quran-plan.js';
 // A saved checkpoint never validates knowledge and never resumes a microphone.
 export function orderedLessonSteps(reviews, learning) {
   return [...reviews, ...learning];
@@ -6,6 +7,7 @@ export function lessonCheckpoint(session, reader, date) {
   if (!session) return null;
   return {
     date,
+    quranPlanVersion:QURAN_PLAN_VERSION,
     savedAt: Date.now(),
     programId: session.program.id,
     returnView: session.returnView || "home",
@@ -61,3 +63,6 @@ export function restoreLesson(checkpoint, program, date) {
     audioRunning: false,
   };
 }
+
+// Only newly created Quran programmes defer imported/old reviews; the knowledge remains intact.
+export function firstDayPlan(plan,programme,date){return programme.corpus==='quran'&&programme.reviewStartsOn&&date<programme.reviewStartsOn?{...plan,recent:[],revision:[]}:plan;}

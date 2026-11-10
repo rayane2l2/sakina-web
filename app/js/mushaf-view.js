@@ -1,3 +1,4 @@
+import {updatePhoneticMushaf} from './phonetic-view.js';
 import { wordKey } from "./page-core.js";
 import { wordHidden, wordBand } from "./word-display.js";
 import { learningWordState } from "./mushaf-learning.js";
@@ -235,6 +236,7 @@ function drawLearning(entry, c, paths) {
   canvas.dataset.activeWord = current.learning.activeWord || "";
 }
 export function updateMushafLearning(learning, hidden) {
+  updatePhoneticMushaf({learning,hidden});
   if (current?.learning) {
     current.learning = learning;
     current.hidden = hidden;
@@ -242,6 +244,7 @@ export function updateMushafLearning(learning, hidden) {
   }
 }
 export function updateMushaf(statuses, hidden) {
+  updatePhoneticMushaf({statuses,hidden});
   if (current) {
     if (
       current.hidden === hidden &&
@@ -256,6 +259,7 @@ export function updateMushaf(statuses, hidden) {
 }
 
 export function updateMushafPlayback(playing, word = null) {
+  updatePhoneticMushaf({playing,playingWord:word});
   if (
     current &&
     (current.playing !== playing || current.playingWord !== word)

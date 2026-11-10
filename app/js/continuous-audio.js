@@ -1,0 +1,2 @@
+export function continuousCue(track,time){const cues=track?.cues||[];if(!cues.length)return null;let low=0,high=cues.length-1;while(low<high){const mid=Math.ceil((low+high)/2);if(cues[mid].start<=time)low=mid;else high=mid-1;}return cues[low];}
+export function continuousRange(track,firstId){const cue=track?.cues?.find(c=>c.id===firstId);if(!cue||!(track.duration>cue.start))return null;return {start:cue===track.cues[0]?0:cue.start,end:track.duration};}

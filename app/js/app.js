@@ -1,3 +1,7 @@
+import {boundedQuranPlan,completeQuranRotation,registerLongCompletion,seedLongSurahs,completionReview,QURAN_PLAN_VERSION} from './quran-plan.js';
+import {versePartsHTML} from './matn-format.js';
+import {mountPhoneticMushaf,matnPhoneticHTML} from './phonetic-view.js';
+import {phoneticCorpus,unitPhonetic} from './transliteration.js';
 import {createProgramWizard} from './program-wizard.js';
 import { createOfflineStore } from "./offline-cache.js";
 import { ReviewPageCursor, readingPlace } from "./review-continuation.js";
@@ -12,7 +16,7 @@ import {
   verseReadingHTML,
   QuranWordAudio,
 } from "./quran-reading.js";
-import { matnSequence, fullMatnAudio, matnLyrics } from "./matn-reading.js";
+import { matnSequence, fullMatnAudio, matnLyrics, matnLibraryHTML } from "./matn-reading.js";
 import {
   mergeReviewSteps,
   regroupRemainingReviews,
@@ -44,6 +48,7 @@ import {
   selectionFields,
 } from "./program-selection.js";
 import {
+  firstDayPlan,
   orderedLessonSteps,
   lessonCheckpoint,
   restoreLesson,
@@ -226,10 +231,10 @@ function prog(p) {
   const date = day(),
     cached = planCache.get(p.memo);
   if (cached?.date === date) return cached.value;
-  const value =
+  const value = firstDayPlan(
     p.corpus === "quran"
-      ? macroPlan(p.memo, date, quranMacroIndex, M)
-      : dailyMatnPlan(p.memo, date, M);
+      ? boundedQuranPlan(p.memo,date,M,{sections:corpora.quran.sections,resolve:id=>findUnit("quran",id)})
+      : dailyMatnPlan(p.memo, date, M),p,date);
   planCache.set(p.memo, { date, value });
   return value;
 }
@@ -340,7 +345,8 @@ function readerSheets() {
 }
 let layoutObserver;
 function render() {
-  const previousMushaf=root.querySelector("#printed-mushaf"),mushafTop=previousMushaf?.parentElement.scrollTop,mushafPage=previousMushaf?.dataset.currentPage;
+  const previousMatnScroll=root.querySelector(".matn-library-scroll");if(previousMatnScroll&&!session)reader.matnScroll=previousMatnScroll.scrollTop;
+  const previousMushaf=root.querySelector("#printed-mushaf,#phonetic-mushaf"),mushafTop=previousMushaf?.parentElement.scrollTop,mushafPage=previousMushaf?.dataset.currentPage;
   const verseScroll=root.querySelector('.quran-verse-scroll'),verseTop=verseScroll?.scrollTop||0,verseKey=verseScroll?.querySelector('[data-verse-key]')?.dataset.verseKey;
   const tajweedOpen=[...root.querySelectorAll('details.tajweed-legend, .tajweed-legend details')].map(el=>el.open);
   const formScroll = [
@@ -396,6 +402,7 @@ function render() {
     const el = root.querySelector(selector);
     if (el) el.scrollTop = top;
   });
+  const matnDocument=root.querySelector('.matn-library-scroll');if(matnDocument){matnDocument.scrollTop=reader.matnScroll||0;if(reader.followMatnOnReturn||reader.matnScroll==null){const id=section(currentCorpus(),reader.sid)?.units[reader.index]?.id,target=matnDocument.querySelector(`[data-matn-unit="${CSS.escape(id||'')}"]`);if(target)matnDocument.scrollTop+=target.getBoundingClientRect().top-matnDocument.getBoundingClientRect().top-12;reader.followMatnOnReturn=false;}}
   if (view === "books") books.afterRender();
   const motionKey =
     view +
@@ -446,6 +453,7 @@ function render() {
         return;
       }
       if (verseMode()) return;
+      if(phoneticMode()){const sheets=readerSheets(),page=sheets[Math.min(reader.sheet||0,sheets.length-1)].page;mountPhoneticMushaf({index:pageIndex,units:session?currentUnits():corpora.quran.sections.flatMap(s=>s.units),hidden:isHidden(),pageNumbers:session?sheets.map(s=>s.page):Array.from({length:604},(_,i)=>i+1),initialPage:page,scrollTop:Number(mushafPage)===page?mushafTop:null,statuses:statusesFor(session?currentUnits():corpora.quran.sections.flatMap(s=>s.units)),revealedAyahs:reader.revealedAyahs||[],revealRecognized:recognitionAvailable(currentCorpus(),session?.current),learning:learningAppearance(),onPage:n=>{const host=root.querySelector("#phonetic-mushaf");if(host)host.dataset.currentPage=n;if(session){const i=sheets.findIndex(s=>s.page===n);if(i>=0)reader.sheet=i;}else if(!recognition.active){reader.page=n;const word=pageIndex[n-1]?.lines[0]?.words[0];if(word)reader.sid=String(word.s);}}});return;}
       const sheets = readerSheets(),
         sheet = sheets[Math.min(reader.sheet || 0, sheets.length - 1)];
       mountMushaf({
@@ -509,10 +517,11 @@ function fitMatn() {
     page.style.fontSize = size + "px";
   }
 }
+function phoneticMode(){return currentCorpus()==='quran'&&quranReadingMode(db.settings.quranReadingMode)==='phonetic';}
+function matnPhonetic(){return currentCorpus()!=='quran'&&db.settings.matnReadingMode==='phonetic';}
 function verseMode() {
   return (
     currentCorpus() === "quran" &&
-    !simpleLearning() &&
     quranReadingMode(db.settings.quranReadingMode) === "verses"
   );
 }
@@ -561,7 +570,7 @@ function freshLabel(p) {
               : `${Number(amount.toFixed(2)).toLocaleString("fr")} page${amount > 1 ? "s" : ""}`;
     return label + " à apprendre";
   }
-  return `${x.fresh.length} ${corpora[p.corpus].unit}${x.fresh.length > 1 ? "s" : ""} à apprendre`;
+  return `${x.fresh.length} ${corpora[p.corpus].unit}${x.fresh.length > 1 && corpora[p.corpus].unit!=="vers" ? "s" : ""} à apprendre`;
 }
 function reviewOptions(p) {
   return {
@@ -585,6 +594,7 @@ function plannedReviews(p) {
         label: "Révision quotidienne · tout l’acquis",
       }));
 }
+function dailySummary(p){const x=prog(p),parts=[];if(plannedReviews(p).length)parts.push('Révisions du jour');if(x.fresh.length)parts.push(freshLabel(p));return parts.join(' · ')||'Ta séance t’attend.';}
 function reviewSummary(p) {
   const groups = plannedReviews(p);
   if (p.corpus !== "quran" && groups.length) {
@@ -657,7 +667,7 @@ function home() {
       ? `data-book-action="start" data-id="${esc(p.id)}"`
       : `data-action="start" data-id="${esc(p.id)}"`;
   const main = first
-    ? `<section class="card today-card"><span class="tag">MA SÉANCE · ${first.kind === "book" ? "QUESTIONS-RÉPONSES" : esc(corpora[first.programme.corpus].name)}</span><h2>${esc(first.name)}</h2><p class="small muted">${first.kind === "book" ? questionSummary(first.review, first.fresh, first.waitingUntil) : `${esc(reviewSummary(first.programme))} · ${freshLabel(first.programme)}`}</p><button class="btn primary block" ${actionAttrs(first)}>${first.resume ? "Reprendre ma séance" : "Commencer ma séance"} ${icon("arrow")}</button></section>`
+    ? `<section class="card today-card"><span class="tag">MA SÉANCE · ${first.kind === "book" ? "QUESTIONS-RÉPONSES" : esc(corpora[first.programme.corpus].name)}</span><h2>${esc(first.name)}</h2><p class="small muted">${first.kind === "book" ? questionSummary(first.review, first.fresh, first.waitingUntil) : `${esc(dailySummary(first.programme))}`}</p><button class="btn primary block" ${actionAttrs(first)}>${first.resume ? "Reprendre ma séance" : "Commencer ma séance"} ${icon("arrow")}</button></section>`
     : `<section class="card today-card"><h2>${db.programs.length || books.hasPrograms() ? "C’est tout pour aujourd’hui." : "Que veux-tu faire ?"}</h2>${db.programs.length || books.hasPrograms() ? button("Mes programmes", "nav", "secondary block", 'data-view="programs"') : `<div class="first-choices">${button("Lire le Coran", "read-quran", "primary block")}${button("Apprendre et réviser", "nav", "secondary block", 'data-view="programs"')}</div>`}</section>`;
   return `<h1 class="home-heading">Prends un instant.<br>Il est pour toi.</h1>${main}${readingResumeButton()}${offlineReady ? "" : `<section class="card offline-invite"><span class="tag">SUR CET APPAREIL</span><h2>Préparation hors connexion</h2><p class="small muted">Téléchargement automatique. Les fichiers déjà présents sont conservés.</p>${button(offlineBusy ? "Préparation en cours…" : "Reprendre la préparation", "offline", "secondary block", offlineBusy ? "disabled" : "")}<p id="offline-progress" class="small muted" role="status">${offlineBusy ? `${offlineDownloaded} téléchargés · ${offlineReused} conservés` : "La préparation reprend là où elle s’est arrêtée."}</p></section>`}<div class="daily-other">${candidates
     .slice(1)
@@ -669,7 +679,7 @@ function home() {
 }
 function programCard(p) {
   const x = prog(p);
-  return `<article class="card program"><span class="tag">${esc(corpora[p.corpus].name)}${p.archived ? " · Archivé" : p.paused ? " · En pause" : ""}</span><h3>${esc(p.name)}</h3>${progress(p)}<div class="program-meta"><span>${x.fresh.length} à apprendre</span><span>${esc(reviewSummary(p))}</span></div><div class="spread">${!p.archived ? button("Continuer " + icon("arrow"), "start", "primary compact", `data-id="${esc(p.id)}"`) : ""}${button("Gérer", "edit", "text", `data-id="${esc(p.id)}"`)}</div></article>`;
+  return `<article class="card program"><span class="tag">${esc(corpora[p.corpus].name)}${p.archived ? " · Archivé" : p.paused ? " · En pause" : ""}</span><h3>${esc(p.name)}</h3>${progress(p)}<div class="program-meta"><span>${esc(dailySummary(p))}</span></div><div class="spread">${!p.archived ? button("Continuer " + icon("arrow"), "start", "primary compact", `data-id="${esc(p.id)}"`) : ""}${button("Gérer", "edit", "text", `data-id="${esc(p.id)}"`)}</div></article>`;
 }
 function library() {
   const c = corpora[libraryCorpus];
@@ -790,7 +800,7 @@ function applyPrior(p, form) {
   };
 }
 let programWizard;
-function guide(){return programWizard??=createProgramWizard({corpora,index:pageIndex,M,resolve:findUnit,today:day,refresh:render,onExit:()=>{view="programs";render();},onBooks:()=>{view="books";render();},onSave:(p,start)=>{if(db.programs.some(x=>x.id===p.id))db.programs=db.programs.map(x=>x.id===p.id?p:x);else db.programs.push(p);stateSave();editing=null;if(start)void startProgram(p.id).catch(e=>toast(e.message));else{view="programs";render();}toast("Programme enregistré.");}});}
+function guide(){return programWizard??=createProgramWizard({corpora,index:pageIndex,M,resolve:findUnit,today:day,refresh:render,onExit:()=>{view="programs";render();},onBooks:()=>{view="books";render();},onSave:(p,start)=>{if(start&&p.corpus==="quran")p.memo=seedLongSurahs(p.memo,corpora.quran.sections,id=>findUnit("quran",id),day());if(db.programs.some(x=>x.id===p.id))db.programs=db.programs.map(x=>x.id===p.id?p:x);else db.programs.push(p);stateSave();editing=null;if(start)void startProgram(p.id).catch(e=>toast(e.message));else{view="programs";render();}toast("Programme enregistré.");}});}
 function newProgram() {
   return guide().render()+(editing?`<div class="qa-manage-actions">${button("Mettre en pause / réactiver","pause-program","secondary",`data-id="${editing}"`)}${button("Archiver","archive-program","secondary",`data-id="${editing}"`)}${button("Supprimer ce programme","delete-program","danger",`data-id="${editing}"`)}</div>`:"");
 }
@@ -869,6 +879,10 @@ function readerView() {
   return readingView(
     {
       corpus,
+      readingMode: quranReadingMode(db.settings.quranReadingMode),
+      phoneticMode: phoneticMode(),
+      matnPhonetic: matnPhonetic(),
+      phoneticAvailable: corpus!=="quran"&&units.every(u=>Boolean(unitPhonetic(corpus,u))),
       verseMode: verseMode(),
       quranTextSize: quranTextSize(db.settings.quranTextSize),
       verseHTML:
@@ -903,9 +917,10 @@ function readerView() {
       matnLyrics: !session && corpus !== "quran",
       lyricsHTML:
         !session && corpus !== "quran"
-          ? matnLyrics(
-              corpora[corpus],
+          ? (playing?matnLyrics:matnLibraryHTML)(
+              matnPhonetic()?phoneticCorpus(corpora[corpus]):corpora[corpus],
               {
+                phonetic:matnPhonetic(),
                 sid: reader.sid,
                 index: reader.index,
                 hidden,
@@ -933,6 +948,8 @@ function readerView() {
       hasAudio: units.every((u) => hasUnitAudio(corpus, u)),
       hidden,
       playing,
+      audioLoading:freeAudioLoading,
+      unitLabel:corpora[corpus].unit,
       repeatNow,
       playbackRate: db.settings.playbackRate,
       recognitionModel: db.settings.recognitionModel,
@@ -942,6 +959,7 @@ function readerView() {
       sheet: reader.sheet,
       sheets: sheets.length,
       textHTML:
+        matnPhonetic()?sheet.units.map(u=>matnPhoneticHTML(corpus,u,hidden)).join(""):
         simpleLearning() && !printedLearning()
           ? session.phase === "listen"
             ? `<div class="lyric-track">${sheet.units.map((u) => learningText(u, hidden)).join("")}</div>`
@@ -971,11 +989,12 @@ function learningText(u, hidden) {
   const text = hidden
     ? '<span class="learning-veil" aria-label="Texte caché"></span>'
     : u.parts && u.text === u.parts.join(" ")
-      ? u.parts.map(esc).join("<br>")
+      ? versePartsHTML(u.parts,esc)
       : esc(u.text);
   return `<div class="learning-unit"><p>${text}</p></div>`;
 }
 function verseHTML(corpus, u, hidden) {
+  if(corpus!=="quran"&&u.parts?.length===2)return `<div class="verse ${hidden?'matn-hidden':''}" data-verse="${esc(u.id)}"><p>${versePartsHTML(u.parts,esc)}</p></div>`;
   const ref = phonetics[u.id],
     active = voice.text;
   let words = u.text
@@ -1039,10 +1058,10 @@ function feedbackHTML() {
 function reminderItems(at = new Date()) {
   const date = localDay(at);
   const memo = db.programs.map((p) => {
-    const x =
+    const x = firstDayPlan(
       p.corpus === "quran"
-        ? macroPlan(p.memo, date, quranMacroIndex, M)
-        : dailyMatnPlan(p.memo, date, M);
+        ? boundedQuranPlan(p.memo,date,M,{sections:corpora.quran.sections,resolve:id=>findUnit("quran",id)})
+        : dailyMatnPlan(p.memo, date, M),p,date);
     const ids = [...x.recent, ...x.revision].flatMap((b) => b.ids || []),
       id = ids[0] || x.fresh[0];
     const name =
@@ -1108,7 +1127,7 @@ function settings() {
           })
           .join("")
       : '<p class="muted">Une étoile dans la lecture, et tu retrouves ton passage ici.</p>'
-  }</section><details class="card"><summary>À propos du suivi vocal</summary><p class="small muted">Sakina.me · version 1.25.1</p><p>Zipformer Quran v3.1 · Quran Lab, via ReciteQuran et le moteur local sherpa-onnx. Reconnaissance des phonèmes en Hafs. Retours expérimentaux, sans validation automatique du tajwid.</p><p>Application personnelle et gratuite. Aucune publicité, aucun compte, aucun envoi d’audio.</p><a href="vendor/LICENSE-ReciteQuran.txt">Conditions ReciteQuran</a> · <a href="THIRD_PARTY_NOTICES.txt">Sources et licences</a></details>`;
+  }</section><details class="card"><summary>À propos du suivi vocal</summary><p class="small muted">Sakina.me · version 1.26</p><p>Zipformer Quran v3.1 · Quran Lab, via ReciteQuran et le moteur local sherpa-onnx. Reconnaissance des phonèmes en Hafs. Retours expérimentaux, sans validation automatique du tajwid.</p><p>Application personnelle et gratuite. Aucune publicité, aucun compte, aucun envoi d’audio.</p><a href="vendor/LICENSE-ReciteQuran.txt">Conditions ReciteQuran</a> · <a href="THIRD_PARTY_NOTICES.txt">Sources et licences</a></details>`;
 }
 async function resetVoice() {
   errorStreak.reset();
@@ -1315,7 +1334,7 @@ function updateVoiceDOM() {
           : playingWord) === `${el.dataset.id}:${el.dataset.position}`,
       ),
     );
-  if (verseMode()) {
+  if (verseMode()||phoneticMode()) {
     const statuses = new Map();
     let at = 0;
     for (const unit of currentUnits())
@@ -1354,7 +1373,7 @@ function updateVoiceDOM() {
     '[data-action="listen"], [data-action="lesson-listen"], [data-action="stop-audio"]',
   );
   if (play) {
-    const running = Boolean(playing || session?.audioRunning);
+    const running = Boolean(playing || session?.audioRunning || freeAudioLoading);
     play.dataset.action = running
       ? "stop-audio"
       : simpleLearning()
@@ -1428,7 +1447,7 @@ async function startProgram(id) {
   const p = db.programs.find((p) => p.id === id);
   if (!p) return;
   const checkpoint = lessonMemory(db, p.id);
-  const restored = restoreLesson(checkpoint, p, day());
+  const restored = p.corpus==="quran"&&checkpoint?.quranPlanVersion!==QURAN_PLAN_VERSION?null:restoreLesson(checkpoint, p, day());
   if (restored) {
     stopPlayback();
     await resetVoice();
@@ -1512,8 +1531,10 @@ async function startProgram(id) {
   render();
   if (session.phase === "listen" && lessonOptions().needsAudio) await listen();
 }
+let freeAudioLoading=false;
 let listenRun = 0;
 function stopPlayback() {
+  freeAudioLoading=false;
   listenRun++;
   audio.stop();
   if (session) session.audioRunning = false;
@@ -1524,6 +1545,7 @@ function stopPlayback() {
   updateMushafPlayback(null, null);
 }
 async function listen(units = currentUnits(), extra = false, options = {}) {
+  if(!session)freeAudioLoading=true;
   const token = ++listenRun,
     lesson = session,
     step = session?.current,
@@ -1559,12 +1581,15 @@ async function listen(units = currentUnits(), extra = false, options = {}) {
     await wordAudio.prepare(units, reciter).catch(() => {});
   if (token !== listenRun) return;
   try {
-    await audio.play(
+    const wholeTrack=options.whole&&corpora[currentCorpus()].continuousAudio;
+    const playAudio=wholeTrack?(corpus,items,reciter,...args)=>audio.playContinuous(corpus,items,wholeTrack,reciter,...args):audio.play;
+    await playAudio(
       currentCorpus(),
       units,
       reciter,
       repeats,
       (u, rep) => {
+        freeAudioLoading=false;
         playing = u?.id || null;
         if (!u) {
           playingWord = null;
@@ -1596,6 +1621,7 @@ async function listen(units = currentUnits(), extra = false, options = {}) {
           }
         }
         if (!u && session === lesson && session) session.audioRunning = false;
+        if(!u&&!session&&currentCorpus()!=="quran"){reader.followMatnOnReturn=true;render();}
         document
           .querySelectorAll(".verse")
           .forEach((el) =>
@@ -1663,6 +1689,7 @@ async function listen(units = currentUnits(), extra = false, options = {}) {
     }
   } catch (e) {
     if (token === listenRun && session === lesson) {
+      freeAudioLoading=false;
       if (session) session.audioRunning = false;
       render();
       toast(e.message);
@@ -1783,11 +1810,12 @@ async function advanceMastered() {
   if (step.kind === "review") {
     p.memo = M.review(p.memo, step.ids, "good", day());
     if (p.corpus === "quran")
-      for (const rotation of step.macroRotations || [step.macroRotation])
+      for (const rotation of step.macroRotations || [step.macroRotation]) {
         p.memo = completeMacroReview(p.memo, rotation, day());
+        p.memo = completeQuranRotation(p.memo,rotation,day());
+      }
   }
-  if (step.kind === "new" && step.test)
-    p.memo = M.learn(p.memo, session.portionIds, day());
+  if (step.kind === "new" && step.test){const before=p.memo;p.memo=M.learn(p.memo,session.portionIds,day());if(p.corpus==='quran'){p.memo=registerLongCompletion(before,p.memo,corpora.quran.sections,id=>findUnit('quran',id),day());const whole=completionReview(p.memo,corpora.quran.sections,id=>findUnit('quran',id));if(whole)session.steps.splice(session.index+1,0,whole);}}
   stateSave();
   session.index++;
   if (session.index >= session.steps.length) {
@@ -1819,6 +1847,7 @@ async function action(el) {
     toast("Rappel de test prévu dans 5 secondes.");
     return;
   }
+  if(a==="matn-reading-mode"){db.settings.matnReadingMode=el.dataset.mode==="phonetic"?"phonetic":"text";stateSave();render();return;}
   if (a === "quran-reading-mode") {
     stopPlayback();
     await resetVoice();
@@ -2209,6 +2238,7 @@ async function action(el) {
     return;
   }
   if (a === "lesson-listen") await listen();
+  if(a==='matn-select'){const corpus=el.dataset.corpus,target=matnSequence(corpora[corpus]).find(x=>x.unit.id===el.dataset.id);if(target){reader.sid=target.sid;reader.index=target.index;stateSave();render();}return;}
   if (a === "matn-focus") {
     const corpus = el.dataset.corpus,
       sequence = matnSequence(corpora[corpus]),
@@ -2264,10 +2294,12 @@ async function action(el) {
     await listen(units, false, { whole: true });
     return;
   }
+  if(a==="listen-current"){await listen([currentUnits()[0]]);return;}
   if (a === "listen") await listen(undefined, true);
   if (a === "listen-verse")
     await listen([findUnit(currentCorpus(), el.dataset.id)]);
   if (a === "stop-audio") {
+    if(!session&&currentCorpus()!=="quran")reader.followMatnOnReturn=true;
     stopPlayback();
     playing = null;
     render();
@@ -2497,6 +2529,7 @@ window.addEventListener("online", () => {
   if (!offlineReady && !offlineBusy) void prepareOffline();
 });
 root.addEventListener("click", (e) => {
+  const rule=e.target.closest("[data-tajweed]");if(rule?.title)toast(rule.title);
   const el = e.target.closest("[data-action],[data-guide]");
   if (el && !el.disabled) action(el).catch((error) => toast(error.message));
 });
@@ -2547,6 +2580,8 @@ bindSpeedControls(root, {
     stateSave();
   },
 });
+let matnScrollFrame;
+root.addEventListener('scroll',event=>{const scroller=event.target;if(!scroller.classList?.contains('matn-library-scroll')||session||playing)return;cancelAnimationFrame(matnScrollFrame);matnScrollFrame=requestAnimationFrame(()=>{const top=scroller.getBoundingClientRect().top+32,target=[...scroller.querySelectorAll('[data-matn-unit]')].find(el=>el.getBoundingClientRect().bottom>top);if(!target)return;const entry=matnSequence(corpora[currentCorpus()]).find(x=>x.unit.id===target.dataset.matnUnit);if(!entry)return;reader.matnScroll=scroller.scrollTop;reader.sid=entry.sid;reader.index=entry.index;scroller.querySelector('[aria-pressed="true"]')?.setAttribute('aria-pressed','false');target.setAttribute('aria-pressed','true');});},true);
 root.addEventListener("input", (e) => {
   if(view==="new"&&guide().input(e.target))return;
   if (e.target.id === "search") {

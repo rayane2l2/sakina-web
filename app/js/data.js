@@ -1,3 +1,5 @@
+import {cleanMatnText} from './matn-format.js';
+import {setTransliterations} from './transliteration.js';
 import { MATN_SPECS, buildImportedMatn } from "./matn-corpus.js";
 import { buildPageUnits, splitPageUnits } from "./page-core.js";
 import { buildMacroIndex } from "./macro-plan.js";
@@ -9,13 +11,15 @@ export let corpora,
   tajweedData;
 let indexes, pageSections;
 export async function loadData() {
-  const [q, m, p, index, tajweed, ...imported] = await Promise.all(
+  const [q, m, p, index, tajweed, transliterations, continuous, ...imported] = await Promise.all(
     [
       "quran",
       "ibn-ashir",
       "phonemes",
       "page-index",
       "tajweed",
+      "transliterations",
+      "matn-continuous",
       ...MATN_SPECS.map((s) => s.file),
     ].map(async (name) => {
       const r = await fetch(`data/${name}.json`);
@@ -24,6 +28,7 @@ export async function loadData() {
     }),
   );
   tajweedData = tajweed;
+  setTransliterations(transliterations);
   const quran = q.surahs.map((s) => ({
     id: String(s.n),
     name: s.name,
@@ -44,8 +49,8 @@ export async function loadData() {
     first: n + 1,
     units: ch.abyat.map((parts) => ({
       id: `${i + 1}:${++n}`,
-      text: parts.join(" "),
-      parts,
+      text: parts.map(cleanMatnText).join(" "),
+      parts: parts.map(cleanMatnText),
       n,
       audio:
         n <= 315 ? `data/ibn-ashir/${String(n).padStart(3, "0")}.mp3` : null,
@@ -65,6 +70,7 @@ export async function loadData() {
     const c = buildImportedMatn(imported[i], MATN_SPECS[i]);
     corpora[c.id] = c;
   }
+  for(const corpus of Object.values(corpora))if(continuous.corpora?.[corpus.id])corpus.continuousAudio=continuous.corpora[corpus.id];
   phonetics = p.verses;
   pageIndex = index;
   pageUnits = buildPageUnits(index);

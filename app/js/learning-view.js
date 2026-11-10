@@ -1,3 +1,4 @@
+import {readingTabs,phoneticPendingHTML} from './phonetic-view.js';
 import { canRecite, canCompleteLesson } from "./lesson-core.js";
 import { listeningProgress } from "./listen-flow.js";
 import { speedDialog, speedTrigger } from "./speed-control.js";
@@ -32,7 +33,8 @@ export function learningView(m, { button: b, icon, esc: e }) {
   return `<header class="learning-head">${b("‹", "close-reader", "learning-close", 'aria-label="Retour au menu précédent"')}<div><span>${m.corpus === "quran" ? "Sabaq" : "Nouveau"}</span><h1>${e(m.title)}</h1></div><span class="learning-position">${m.stepIndex + 1} / ${m.stepCount}</span></header>
  <div class="progress learning-progress" role="progressbar" aria-label="Progression de la séance" aria-valuemin="0" aria-valuemax="${m.stepCount}" aria-valuenow="${m.stepIndex + (listening ? 0.5 : 1)}"><i style="width:${(100 * (m.stepIndex + (listening ? 0.5 : 1))) / m.stepCount}%"></i></div>
  <div class="learning-heading"><h2>${e(m.stepTitle)}</h2><p>${listening ? hint : "Récite de mémoire, à ton rythme."}</p></div>
- <main class="reader-stage learning-card ${m.mushaf ? "learning-mushaf" : ""}" id="reader-stage" ${m.mushaf ? 'tabindex="0" aria-label="Page du Coran"' : ""}>${m.mushaf ? '<div id="printed-mushaf"></div>' : `<div class="matn-page learning-page ${listening ? "lyric-mode" : ""}" dir="rtl" lang="ar">${m.textHTML}</div>`}${m.mushaf && m.sheets > 1 ? `<span class="mushaf-page-position">${m.sheet + 1} / ${m.sheets}</span>` : ""}</main>
+ <div class="learning-reading-tabs">${readingTabs(m.corpus==='quran'?(m.readingMode||'mushaf'):(m.matnPhonetic?'phonetic':'text'),b,m.corpus)}</div>
+ <main class="reader-stage learning-card ${m.matnPhonetic?'phonetic-reading':''} ${m.verseMode?'verse-reading-stage':''} ${m.mushaf ? "learning-mushaf" : ""}" id="reader-stage" ${m.mushaf ? 'tabindex="0" aria-label="Page du Coran"' : ""}>${m.matnPhonetic&&!m.phoneticAvailable ? phoneticPendingHTML() : m.verseMode ? m.verseHTML : m.phoneticMode ? '<div id="phonetic-mushaf"></div>' : m.mushaf ? '<div id="printed-mushaf"></div>' : `<div class="matn-page learning-page ${listening ? "lyric-mode" : ""}" dir="rtl" lang="ar">${m.textHTML}</div>`}${m.mushaf && m.sheets > 1 ? `<span class="mushaf-page-position">${m.sheet + 1} / ${m.sheets}</span>` : ""}</main>
  ${!m.mushaf && !listening && m.sheets > 1 ? `<div class="learning-sheets">${b("‹", "sheet-previous", "text", `aria-label="Feuillet précédent" ${m.sheet === 0 ? "disabled" : ""}`)}<span>${m.sheet + 1} / ${m.sheets}</span>${b("›", "sheet-next", "text", `aria-label="Feuillet suivant" ${m.sheet >= m.sheets - 1 ? "disabled" : ""}`)}</div>` : ""}
  <footer class="learning-controls ${listening ? "listening-controls" : "reciting-controls"}">${
    listening

@@ -1,0 +1,3 @@
+// Display-only cleanup: preserve parenthetical content except the requested wa baʿdu marker.
+export function cleanMatnText(text){return String(text??'').replace(/[（(]([^()（）]*)[）)]/g,(full,inner)=>{const arabic=inner.normalize('NFC').replace(/[\u064b-\u065f\u0670\sـ]/g,'');const latin=inner.toLowerCase().replace(/[\s‘’'ʿ^’-]/g,'');return arabic==='وبعد'||['wabadou','wabadu'].includes(latin)?inner.trim():full;});}
+export function versePartsHTML(parts,escape,phonetic=false){return `<span class="bayt-parts" dir="rtl">${parts.map(part=>`<span class="bayt-half" lang="${phonetic?'fr':'ar'}" dir="${phonetic?'ltr':'rtl'}">${escape(cleanMatnText(part))}</span>`).join('')}</span>`;}

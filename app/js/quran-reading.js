@@ -1,3 +1,4 @@
+import {versePhoneticHTML,phoneticLegend} from './phonetic-view.js';
 import {
   RECITER_AUDIO_FOLDERS,
   playbackWord,
@@ -7,7 +8,7 @@ import {
 } from "./quran-audio-sync.js";
 import { tajweedWord, tajweedLegend } from "./tajweed.js";
 export const quranReadingMode = (value) =>
-  value === "verses" ? "verses" : "mushaf";
+  ["verses","phonetic"].includes(value) ? value : "mushaf";
 export const quranTextSize = (value) =>
   Math.max(28, Math.min(56, Number(value) || 40));
 const spoken = (text) => /[\u0621-\u064a\u0671]/u.test(text);
@@ -53,7 +54,7 @@ export function verseReadingHTML(
   escape,
 ) {
   const e = escape;
-  return `<div class="quran-verse-scroll" tabindex="0" aria-label="Lecture du Coran, verset par verset" style="--quran-text-size:${quranTextSize(size)}px">${tajweed ? tajweedLegend(e) : ""}${showHint ? '<p class="quran-verse-help">Touche un mot pour l’écouter. ▶ lit le verset.</p>' : ""}${units
+  return `<div class="quran-verse-scroll" tabindex="0" aria-label="Lecture du Coran, verset par verset" style="--quran-text-size:${quranTextSize(size)}px">${tajweed ? tajweedLegend(e) : ""}${phoneticLegend()}${showHint ? '<p class="quran-verse-help">Touche un mot pour l’écouter. ▶ lit le verset.</p>' : ""}${units
     .map((u) => {
       const [sid, n] = u.id.split(":"),
         name = sections.find((s) => String(s.id) === sid)?.name || sid;
@@ -66,7 +67,7 @@ export function verseReadingHTML(
             ? `<button type="button" class="quran-word ${wordPlaying === u.id + ":" + w.position ? "is-speaking" : ""}" data-action="listen-word" data-id="${e(u.id)}" data-position="${w.position}" data-coordinate="${u !== resolve(u.id) && u.wordRefs?.length ? "printed" : "canonical"}" aria-label="Écouter le mot ${e(w.text)}">${tajweedWord(w.text, u.id, w.position, u !== resolve(u.id) && u.wordRefs?.length ? "printed" : "canonical", tajweed, e)}</button>`
             : `<span class="quran-pause">${e(w.text)}</span>`,
         )
-        .join(" ")}</p></article>`;
+        .join(" ")}</p>${versePhoneticHTML(u)}</article>`;
     })
     .join(
       "",

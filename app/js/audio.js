@@ -1,3 +1,4 @@
+import {continuousCue,continuousRange} from './continuous-audio.js';
 import { RECITER_AUDIO_FOLDERS } from "./quran-audio-sync.js";
 import { findUnit } from "./data.js";
 import { normalizeSpeed } from "./playback-speed.js";
@@ -267,4 +268,13 @@ export async function play(
       onStep(null, 0);
     }
   }
+}
+
+// A complete recording uses one player and one uninterrupted source. Cue changes
+// only move the displayed lyrics; isolated-unit playback still uses the cut files.
+export async function playContinuous(corpus,units,track,reciter,repeats=1,onStep=()=>{},onCycleComplete=()=>{},onTime=()=>{}){
+ const first=units[0],range=continuousRange(track,first?.id);if(!range)throw Error('Enregistrement complet indisponible.');const byId=new Map(units.map(u=>[u.id,u]));let currentId=null,round=1;
+ const source={...first,sources:null,audio:track.file,audioRevision:track.sha256?.slice(0,12)||null,audioRange:range};
+ const update=(time,notify=true)=>{const cue=continuousCue(track,time),unit=cue&&(byId.get(cue.id)||findUnit(corpus,cue.id));if(unit&&unit.id!==currentId){currentId=unit.id;onStep(unit,round);}if(unit&&notify)onTime(unit,Math.max(0,time-cue.start),Math.max(.01,cue.end-cue.start));};
+ return play(corpus,[source],reciter,repeats,(unit,rep)=>{if(!unit){onStep(null,0);return;}round=rep;currentId=null;update(range.start,false);},onCycleComplete,(_unit,time)=>update(time));
 }

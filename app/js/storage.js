@@ -1,3 +1,4 @@
+import { quranReadingMode, quranTextSize } from "./quran-reading.js";
 import { validateBookStudy } from "./books-core.js";
 import { supportedCorpus } from "./matn-corpus.js";
 import { normalizeModel } from "./model-choice.js";
@@ -9,6 +10,8 @@ const empty = () => ({
   bookmarks: [],
   settings: {
     reciter: "minshawi",
+    quranReadingMode: "mushaf",
+    quranTextSize: 40,
     repeat: 1,
     freeRepeatDefaultV2: true,
     playbackRate: 1,
@@ -32,6 +35,8 @@ export function load() {
       ...s.settings,
       recognitionModel: normalizeModel(s.settings?.recognitionModel),
       playbackRate: normalizeSpeed(s.settings?.playbackRate),
+      quranReadingMode: quranReadingMode(s.settings?.quranReadingMode),
+      quranTextSize: quranTextSize(s.settings?.quranTextSize),
     };
     if (!previous.freeRepeatDefaultV2 && previous.repeat === 3)
       s.settings.repeat = 1;

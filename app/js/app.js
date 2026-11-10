@@ -1,3 +1,11 @@
+import {
+  quranReadingMode,
+  quranTextSize,
+  pageVerseUnits,
+  spokenVerseUnit,
+  verseReadingHTML,
+  QuranWordAudio,
+} from "./quran-reading.js";
 import { matnSequence, fullMatnAudio, matnLyrics } from "./matn-reading.js";
 import {
   mergeReviewSteps,
@@ -142,12 +150,14 @@ let db = load(),
   recognition = new Recognition(db.settings.recognitionModel),
   voice = { status: "idle", text: "", final: false, result: null },
   playing = null,
+  playingWord = null,
   repeatNow = 0,
   installPrompt = null,
   offlineBusy = false,
   offlineReady = false,
   offlineCount = 0,
   offlineTotal = 0;
+const wordAudio = new QuranWordAudio();
 audio.setSpeed(db.settings.playbackRate);
 let reminders = null,
   reminderTimer = null,
@@ -319,7 +329,9 @@ function readerSheets() {
 let layoutObserver;
 function render() {
   const formScroll = [
-    ...root.querySelectorAll(".selection-choices,.qa-choice-list"),
+    ...root.querySelectorAll(
+      ".selection-choices,.qa-choice-list,.quran-verse-scroll",
+    ),
   ].map((el) => ({ selector: "." + el.classList[0], top: el.scrollTop }));
   if (view !== lastScreen) {
     screenHistory.push(lastScreen);
@@ -403,6 +415,7 @@ function render() {
         } else fitMatn();
         return;
       }
+      if (verseMode()) return;
       const sheets = readerSheets(),
         sheet = sheets[Math.min(reader.sheet || 0, sheets.length - 1)];
       mountMushaf({
@@ -462,7 +475,15 @@ function fitMatn() {
     page.style.fontSize = size + "px";
   }
 }
+function verseMode() {
+  return (
+    currentCorpus() === "quran" &&
+    !simpleLearning() &&
+    quranReadingMode(db.settings.quranReadingMode) === "verses"
+  );
+}
 function isHidden() {
+  if (verseMode()) return false;
   return Boolean(reader.hidden && !reader.reveal);
 }
 function lessonOptions() {
@@ -716,6 +737,11 @@ function currentUnits() {
       ? reviewRecitationUnits(units)
       : units;
   }
+  if (reader.corpus === "quran" && verseMode()) {
+    const units = pageVerseUnits(corpora.quran.sections, reader.page),
+      anchor = units.findIndex((u) => u.id === reader.anchorId);
+    return units.slice(Math.max(0, anchor)).map(spokenVerseUnit);
+  }
   if (reader.corpus === "quran")
     return unitsFromAyah(
       pageUnits.filter((u) => u.page === reader.page),
@@ -759,6 +785,25 @@ function readerView() {
   return readingView(
     {
       corpus,
+      verseMode: verseMode(),
+      verseHTML:
+        corpus === "quran" && verseMode()
+          ? verseReadingHTML(
+              {
+                units: session
+                  ? units
+                  : pageVerseUnits(corpora.quran.sections, reader.page),
+                sections: corpora.quran.sections,
+                resolve: (id) => findUnit("quran", id),
+                size: db.settings.quranTextSize,
+                wordPlaying: playingWord,
+                pageNavigation: session
+                  ? null
+                  : { first: reader.page <= 1, last: reader.page >= 604 },
+              },
+              esc,
+            )
+          : "",
       swipeHint: !db.settings.quranSwipeSeen,
       title: s.name,
       subtitle:
@@ -974,7 +1019,7 @@ function settings() {
           })
           .join("")
       : '<p class="muted">Une étoile dans la lecture, et tu retrouves ton passage ici.</p>'
-  }</section><details class="card"><summary>À propos du suivi vocal</summary><p class="small muted">Sakina.me · version 1.20.1</p><p>Zipformer Quran v3.1 · Quran Lab, via ReciteQuran et le moteur local sherpa-onnx. Reconnaissance des phonèmes en Hafs. Retours expérimentaux, sans validation automatique du tajwid.</p><p>Application personnelle et gratuite. Aucune publicité, aucun compte, aucun envoi d’audio.</p><a href="vendor/LICENSE-ReciteQuran.txt">Conditions ReciteQuran</a> · <a href="THIRD_PARTY_NOTICES.txt">Sources et licences</a></details>`;
+  }</section><details class="card"><summary>À propos du suivi vocal</summary><p class="small muted">Sakina.me · version 1.21</p><p>Zipformer Quran v3.1 · Quran Lab, via ReciteQuran et le moteur local sherpa-onnx. Reconnaissance des phonèmes en Hafs. Retours expérimentaux, sans validation automatique du tajwid.</p><p>Application personnelle et gratuite. Aucune publicité, aucun compte, aucun envoi d’audio.</p><a href="vendor/LICENSE-ReciteQuran.txt">Conditions ReciteQuran</a> · <a href="THIRD_PARTY_NOTICES.txt">Sources et licences</a></details>`;
 }
 async function resetVoice() {
   errorStreak.reset();
@@ -1158,6 +1203,35 @@ function attachRecognition() {
   });
 }
 function updateVoiceDOM() {
+  root
+    .querySelectorAll(".quran-verse-block")
+    .forEach((el) =>
+      el.classList.toggle("is-playing", el.dataset.verseKey === playing),
+    );
+  root
+    .querySelectorAll(".quran-word")
+    .forEach((el) =>
+      el.classList.toggle(
+        "is-speaking",
+        playingWord === `${el.dataset.id}:${el.dataset.position}`,
+      ),
+    );
+  if (verseMode()) {
+    const statuses = new Map();
+    let at = 0;
+    for (const unit of currentUnits())
+      for (const w of unit.wordRefs || [])
+        statuses.set(
+          `${w.s}:${w.a}:${w.w}`,
+          voice.result?.words[at++]?.status || "waiting",
+        );
+    root.querySelectorAll(".quran-word").forEach((el) => {
+      const status =
+        statuses.get(`${el.dataset.id}:${el.dataset.position}`) || "waiting";
+      el.classList.toggle("is-heard", status === "heard");
+      el.classList.toggle("is-check", status === "check");
+    });
+  }
   const lyric = root.querySelector(".matn-lyrics");
   lyric
     ?.querySelector(".matn-lyric-current")
@@ -1334,6 +1408,7 @@ function stopPlayback() {
   audio.stop();
   if (session) session.audioRunning = false;
   playing = null;
+  playingWord = null;
   repeatNow = 0;
   updateMushafPlayback(null);
 }
@@ -1342,7 +1417,7 @@ async function listen(units = currentUnits(), extra = false, options = {}) {
     lesson = session,
     step = session?.current,
     returnToRecite = session?.phase === "recite";
-  if (session) {
+  if (session && !options.readingOnly) {
     session.listenTarget ??= listeningGoal(session.program.memo.repeat);
     if (extra || session.listenTarget <= session.listened)
       session.listenTarget = session.listened + 1;
@@ -1355,12 +1430,16 @@ async function listen(units = currentUnits(), extra = false, options = {}) {
   }
   const completePortion =
     session &&
+    !options.readingOnly &&
     units.length === currentUnits().length &&
     units.every((u, i) => u.id === currentUnits()[i].id);
   const startListened = session?.listened || 0;
-  const repeats = session
-    ? () => Math.max(0, lesson.listenTarget - startListened)
-    : db.settings.repeat;
+  const repeats =
+    options.repeats ??
+    (session
+      ? () => Math.max(0, lesson.listenTarget - startListened)
+      : db.settings.repeat);
+  playingWord = options.word ? `${units[0].id}:${options.word}` : null;
   await resetVoice();
   voice.status = "idle";
   render();
@@ -1368,10 +1447,11 @@ async function listen(units = currentUnits(), extra = false, options = {}) {
     await audio.play(
       currentCorpus(),
       units,
-      db.settings.reciter,
+      options.reciter || db.settings.reciter,
       repeats,
       (u, rep) => {
         playing = u?.id || null;
+        if (!u) playingWord = null;
         repeatNow = rep;
         if (u && simpleLearning()) followLearningAudio(u.id);
         else if (u && options.whole) {
@@ -1397,6 +1477,21 @@ async function listen(units = currentUnits(), extra = false, options = {}) {
             ? `Écoute ${rep} · ${corpora[currentCorpus()].unit} ${u.n}`
             : "Écoute terminée.";
         updateVoiceDOM();
+        if (u && verseMode() && !options.word) {
+          const scroller = root.querySelector(".quran-verse-scroll"),
+            card = root.querySelector(`[data-verse-key="${CSS.escape(u.id)}"]`);
+          if (scroller && card) {
+            const bounds = scroller.getBoundingClientRect(),
+              rect = card.getBoundingClientRect();
+            if (rect.top < bounds.top || rect.bottom > bounds.bottom)
+              scroller.scrollTo({
+                top: scroller.scrollTop + rect.top - bounds.top - 8,
+                behavior: matchMedia("(prefers-reduced-motion: reduce)").matches
+                  ? "instant"
+                  : "smooth",
+              });
+          }
+        }
       },
       () => {
         if (completePortion && session === lesson && session.current === step) {
@@ -1566,6 +1661,61 @@ async function action(el) {
   if (a === "reminder-test") {
     await reminders.test();
     toast("Rappel de test prévu dans 5 secondes.");
+    return;
+  }
+  if (a === "quran-reading-mode") {
+    stopPlayback();
+    await resetVoice();
+    db.settings.quranReadingMode = quranReadingMode(el.dataset.mode);
+    stateSave();
+    render();
+    return;
+  }
+  if (a === "quran-font") {
+    db.settings.quranTextSize = quranTextSize(
+      quranTextSize(db.settings.quranTextSize) + Number(el.dataset.delta),
+    );
+    stateSave();
+    render();
+    return;
+  }
+  if (a === "listen-reading-verse") {
+    const unit = findUnit("quran", el.dataset.id);
+    if (!unit) return;
+    if (!session) {
+      reader.anchorId = unit.id;
+      reader.sid = unit.id.split(":")[0];
+    }
+    await listen([unit], false, { repeats: 1, readingOnly: true });
+    return;
+  }
+  if (a === "listen-word") {
+    const id = el.dataset.id,
+      position = Number(el.dataset.position),
+      unit = findUnit("quran", id);
+    if (!unit) return;
+    stopPlayback();
+    updateVoiceDOM();
+    const request = listenRun;
+    el.disabled = true;
+    try {
+      const range = await wordAudio.range(id, position);
+      if (request !== listenRun || view !== "reader" || !verseMode()) return;
+      if (!range) {
+        toast(
+          "Le découpage de ce mot n’est pas disponible. Tu peux écouter le verset entier.",
+        );
+        return;
+      }
+      await listen([{ ...unit, audioRange: range }], false, {
+        reciter: "minshawi",
+        repeats: 1,
+        word: position,
+        readingOnly: true,
+      });
+    } finally {
+      if (el.isConnected) el.disabled = false;
+    }
     return;
   }
   if (a === "back") {
@@ -1815,6 +1965,7 @@ async function action(el) {
     render();
   }
   if (a === "hide-text") {
+    if (verseMode()) return;
     reader.revealedAyahs = [];
     reader.hidden = true;
     reader.reveal = false;
@@ -2026,7 +2177,7 @@ async function offlineInventory() {
 async function checkOffline() {
   try {
     const files = await offlineInventory(),
-      cache = await caches.open("sakina-recite-v28"),
+      cache = await caches.open("sakina-recite-v29"),
       keys = new Set((await cache.keys()).map((r) => r.url));
     offlineReady = files.every((f) => keys.has(new URL(f, location.href).href));
     if (view === "home") render();
@@ -2041,7 +2192,7 @@ async function prepareOffline(el) {
   try {
     if ("serviceWorker" in navigator) await navigator.serviceWorker.ready;
     const files = await offlineInventory(),
-      cache = await caches.open("sakina-recite-v28");
+      cache = await caches.open("sakina-recite-v29");
     offlineCount = 0;
     offlineTotal = files.length;
     for (const file of files) {
@@ -2070,7 +2221,8 @@ root.addEventListener("click", (e) => {
   if (el && !el.disabled) action(el).catch((error) => toast(error.message));
 });
 bindQuranPages(root, {
-  enabled: () => view === "reader" && currentCorpus() === "quran",
+  enabled: () =>
+    view === "reader" && currentCorpus() === "quran" && !verseMode(),
   onError: toast,
   onTurn: async (delta) => {
     const move = nextQuranPage(

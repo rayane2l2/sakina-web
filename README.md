@@ -65,3 +65,9 @@ Livraisons uniquement web/PWA à partir de cette version, aucun nouvel APK.
 ### 1.20.1
 
 Correction du rendu du Moukhtassar : un tableau d’hémistiches vide ne masque plus le texte en prose. Les hémistiches d’Ibn Ashir conservent leur présentation. Contrôle automatisé sur tous les passages réels du Moukhtassar sans hémistiches.
+
+## Version 1.21 — Mushaf et verset par verset
+
+Nouveau mode de lecture arabe agrandie, taille réglable, sans masquage. Le Mushaf conserve les positions imprimées et place Cacher/Afficher près du lecteur. Les commandes restent fixes et seuls les versets défilent. Un mot se touche pour écouter son extrait Minshawi ; un bouton distinct lit le verset entier. Les ayahs qui traversent une page restent complètes dans cette vue. Aucun texte traduit ou tafsir ajouté.
+
+Les repères mot par mot proviennent des métadonnées Minshawi déjà utilisées par le projet (cpfair/quran-align, CC BY 4.0). 77 344 mots ont un découpage unique, 94 restent indisponibles et proposent l’ayah entière. Les ayahs téléchargées sont réutilisées hors connexion, sans fichiers MP3 par mot supplémentaires ni serveur. Les limites de mots sont issues de l’alignement et ne constituent pas une validation humaine de chaque découpe.

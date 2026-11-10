@@ -8,8 +8,8 @@ function edges(u, corpus) {
     point = { s, a: Number(u.n) || a, w: 1 };
   return { first: point, last: point };
 }
-function adjacent(a, b, corpus, verse) {
-  if (a.s !== b.s) return false;
+function adjacent(a, b, corpus, verse, chainMatn) {
+  if (a.s !== b.s && (!chainMatn || corpus === "quran")) return false;
   if (corpus !== "quran") return b.a <= a.a + 1;
   if (compare(b, a) <= 0) return true;
   if (b.a === a.a) return b.w <= a.w + 1;
@@ -19,7 +19,10 @@ function adjacent(a, b, corpus, verse) {
     a.w === (verse(`${a.s}:${a.a}`)?.wordRefs?.length || 1)
   );
 }
-export function mergeReviewSteps(blocks, { corpus, resolve }) {
+export function mergeReviewSteps(
+  blocks,
+  { corpus, resolve, chainMatn = false },
+) {
   const entries = new Map();
   for (const block of blocks)
     for (const id of block.ids) {
@@ -46,7 +49,10 @@ export function mergeReviewSteps(blocks, { corpus, resolve }) {
     (a, b) => compare(a.first, b.first) || compare(a.last, b.last),
   )) {
     let group = groups.at(-1);
-    if (!group || !adjacent(group.end, entry.first, corpus, resolve)) {
+    if (
+      !group ||
+      !adjacent(group.end, entry.first, corpus, resolve, chainMatn)
+    ) {
       group = {
         ids: [],
         kind: "review",
@@ -67,7 +73,15 @@ export function mergeReviewSteps(blocks, { corpus, resolve }) {
       )
         group.macroRotations.push(r);
   }
-  return groups.map(({ end, ...step }) => step);
+  return groups.map(({ end, ...step }) =>
+    chainMatn
+      ? {
+          ...step,
+          dailyMatn: true,
+          label: "Révision quotidienne · tout l’acquis",
+        }
+      : step,
+  );
 }
 export function regroupRemainingReviews(session, options) {
   if (session.current.kind !== "review") return session;

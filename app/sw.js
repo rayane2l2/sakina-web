@@ -1,15 +1,48 @@
-const CACHE='sakina-recite-v32';
-const CORE=['./','index.html','style.css','theme.css','manifest.webmanifest','js/app.js','js/quran-audio-sync.js','js/review-continuation.js','js/quran-reading.js','js/review-flow.js','js/matn-reading.js','js/reminders-core.js','js/reminders-service.js','js/reminders-view.js','vendor/capacitor-core.mjs','books.css','js/programme-ux.js','js/session-memory.js','js/quran-page-gesture.js','js/program-selection.js','js/navigation.js','js/daily-session.js','js/book-practice.js','js/book-content.js','js/books-core.js','js/books-ui.js','js/books-store.js','vendor/ts-fsrs-5.2.3.mjs','data/books/catalog.json','data/books/rejouissance-fr/edition.json','data/books/but-etudiants-fr/edition.json','js/brand.js','js/prior-learning.js','js/data.js','js/matn-corpus.js','js/storage.js','js/alignment.js','js/alignment-client.js','js/alignment-worker.js','js/reading-position.js','js/word-display.js','js/audio.js','js/playback-speed.js','js/recognition.js','js/model-choice.js','js/microphone-worklet.js','js/asr-worker.js','js/memo-core.js','js/macro-plan.js','js/page-core.js','js/mushaf-view.js','js/mushaf-learning.js','js/sounds.js','js/recitation-feedback.js','js/lesson-core.js','js/reader-view.js','js/learning-view.js','js/listen-flow.js','js/speed-control.js','data/page-index.json','vendor/qvp.js','vendor/qvp_ffi.wasm','data/quran.json','data/ibn-ashir.json','data/mukhtasar-al-harari.json','data/phonemes.json','assets/book.png','assets/sakina-mark.svg','assets/wordmark.png','assets/nunito.woff2','assets/arabic.woff2','assets/icon-192.png','assets/icon-512.png','offline-files.json'];
-self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(c=>c.addAll(CORE.map(url=>new Request(url,{cache:'reload'})))).then(()=>self.skipWaiting())));
-self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key.startsWith('sakina-recite-')&&key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim())));
+import {createOfflineStore} from './js/offline-cache.js';
+const CACHE='sakina-recite-v34';
+const CORE=['./','index.html','style.css','theme.css','manifest.webmanifest','js/app.js','js/offline-cache.js','js/tajweed.js','js/matn-plan.js','js/quran-audio-sync.js','js/review-continuation.js','js/quran-reading.js','js/review-flow.js','js/matn-reading.js','js/reminders-core.js','js/reminders-service.js','js/reminders-view.js','vendor/capacitor-core.mjs','books.css','js/programme-ux.js','js/session-memory.js','js/quran-page-gesture.js','js/program-selection.js','js/navigation.js','js/daily-session.js','js/book-practice.js','js/book-content.js','js/books-core.js','js/books-ui.js','js/books-store.js','vendor/ts-fsrs-5.2.3.mjs','data/books/catalog.json','data/books/rejouissance-fr/edition.json','data/books/but-etudiants-fr/edition.json','js/brand.js','js/prior-learning.js','js/data.js','js/matn-corpus.js','js/storage.js','js/alignment.js','js/alignment-client.js','js/alignment-worker.js','js/reading-position.js','js/word-display.js','js/audio.js','js/playback-speed.js','js/recognition.js','js/model-choice.js','js/microphone-worklet.js','js/asr-worker.js','js/memo-core.js','js/macro-plan.js','js/page-core.js','js/mushaf-view.js','js/mushaf-learning.js','js/sounds.js','js/recitation-feedback.js','js/lesson-core.js','js/reader-view.js','js/learning-view.js','js/listen-flow.js','js/speed-control.js','data/page-index.json','data/tajweed.json','vendor/qvp.js','vendor/qvp_ffi.wasm','data/quran.json','data/ibn-ashir.json','data/mukhtasar-al-harari.json','data/phonemes.json','assets/book.png','assets/sakina-mark.svg','assets/wordmark.png','assets/nunito.woff2','assets/arabic.woff2','assets/icon-192.png','assets/icon-512.png','offline-files.json','offline-manifest.json'];
+const BASE=new URL('./',self.location.href);
+let storePromise;
+async function store(){
+ if(!storePromise)storePromise=(async()=>{const cache=await caches.open(CACHE);const response=await cache.match(new URL('offline-manifest.json',BASE).href);if(!response)throw Error('Inventaire hors connexion indisponible.');return createOfflineStore({manifest:await response.json(),baseURL:BASE.href,shellCache:CACHE});})().catch(error=>{storePromise=null;throw error;});
+ return storePromise;
+}
+async function install(){
+ const shell=await caches.open(CACHE);
+ const isAsset=file=>file.startsWith('data/')||/\.(wasm|woff2)$/.test(file);
+ await shell.addAll(CORE.filter(file=>!isAsset(file)).map(url=>new Request(new URL(url,BASE),{cache:'reload'})));
+ const persistent=await store();
+ for(const file of CORE.filter(isAsset))await persistent.ensure(file);
+ await self.skipWaiting();
+}
+self.addEventListener('install',event=>event.waitUntil(install()));
+// Preserve legacy caches until the offline store has migrated their matching files.
+self.addEventListener('activate',event=>event.waitUntil(self.clients.claim()));
 self.addEventListener('fetch',event=>{
- if(event.request.method!=='GET'||new URL(event.request.url).origin!==self.location.origin)return;
- if(/\.(js|css|html)$/.test(new URL(event.request.url).pathname)||new URL(event.request.url).pathname.endsWith('/offline-files.json')||event.request.mode==='navigate'||/\/data\/books\/(?:catalog\.json|[^/]+\/edition\.json)$/.test(new URL(event.request.url).pathname)){
-  event.respondWith(fetch(event.request,{cache:'no-cache'}).then(async response=>{if(response.ok&&response.status!==206){const cache=await caches.open(CACHE);await cache.put(event.request,response.clone());}return response;}).catch(()=>caches.open(CACHE).then(cache=>cache.match(event.request)).then(hit=>hit||caches.open(CACHE).then(cache=>cache.match('index.html')))));return;
- }
- event.respondWith(caches.open(CACHE).then(cache=>cache.match(event.request,{ignoreSearch:/\.mp3$/.test(new URL(event.request.url).pathname)})).then(hit=>hit?audioRange(event.request,hit):fetch(event.request).then(async response=>{
-  if(response.ok&&response.status!==206){const cache=await caches.open(CACHE);await cache.put(event.request,response.clone());}return response;
- }).catch(()=>event.request.mode==='navigate'?caches.open(CACHE).then(cache=>cache.match('index.html')):Response.error())));
+ const request=event.request,url=new URL(request.url);
+ if(request.method!=='GET'||url.origin!==self.location.origin)return;
+ if(request.headers?.get('X-Sakina-Offline-Fetch')==='1'){event.respondWith(fetch(request));return;}
+ event.respondWith((async()=>{
+  const relative=decodeURIComponent(url.pathname.slice(BASE.pathname.length))||'./';
+  const shell=await caches.open(CACHE);
+  const code=/\.(js|css|html)$/.test(url.pathname)||request.mode==='navigate'||/\/offline-(?:files|manifest)\.json$/.test(url.pathname)||/\/data\/books\/(?:catalog\.json|[^/]+\/edition\.json)$/.test(url.pathname);
+  if(code){
+   try{const response=await fetch(request,{cache:'no-cache'});if(response.ok&&response.status!==206)await shell.put(request,response.clone());return response;}
+   catch{
+    const current=await shell.match(request);if(current)return current;
+    try{const retained=await (await store()).ensure(relative,{allowNetwork:false});if(retained)return retained.response;}catch{}
+    return request.mode==='navigate'?(await shell.match(new URL('index.html',BASE).href)||Response.error()):Response.error();
+   }
+  }
+  let manifest;
+  try{const inventory=await shell.match(new URL('offline-manifest.json',BASE).href);manifest=inventory?await inventory.json():null;}catch{}
+  if(manifest?.files?.[relative]){
+   try{return audioRange(request,(await (await store()).ensure(relative)).response);}catch{return Response.error();}
+  }
+  const hit=await shell.match(request,{ignoreSearch:/\.mp3$/.test(url.pathname)});
+  if(hit)return audioRange(request,hit);
+  try{const response=await fetch(request);if(response.ok&&response.status!==206)await shell.put(request,response.clone());return response;}catch{return Response.error();}
+ })());
 });
 
 // Native audio elements request byte ranges. Never Cache.put a partial 206 body.

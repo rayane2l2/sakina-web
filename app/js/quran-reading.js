@@ -5,6 +5,7 @@ import {
   printedPositions,
   canonicalPositions,
 } from "./quran-audio-sync.js";
+import { tajweedWord, tajweedLegend } from "./tajweed.js";
 export const quranReadingMode = (value) =>
   value === "verses" ? "verses" : "mushaf";
 export const quranTextSize = (value) =>
@@ -47,11 +48,12 @@ export function verseReadingHTML(
     pageNavigation = null,
     wordPlaying = null,
     showHint = true,
+    tajweed = null,
   },
   escape,
 ) {
   const e = escape;
-  return `<div class="quran-verse-scroll" tabindex="0" aria-label="Lecture du Coran, verset par verset" style="--quran-text-size:${quranTextSize(size)}px">${showHint ? '<p class="quran-verse-help">Touche un mot pour l’écouter. ▶ lit le verset.</p>' : ""}${units
+  return `<div class="quran-verse-scroll" tabindex="0" aria-label="Lecture du Coran, verset par verset" style="--quran-text-size:${quranTextSize(size)}px">${tajweed ? tajweedLegend(e) : ""}${showHint ? '<p class="quran-verse-help">Touche un mot pour l’écouter. ▶ lit le verset.</p>' : ""}${units
     .map((u) => {
       const [sid, n] = u.id.split(":"),
         name = sections.find((s) => String(s.id) === sid)?.name || sid;
@@ -61,7 +63,7 @@ export function verseReadingHTML(
       )
         .map((w) =>
           w.position
-            ? `<button type="button" class="quran-word ${wordPlaying === u.id + ":" + w.position ? "is-speaking" : ""}" data-action="listen-word" data-id="${e(u.id)}" data-position="${w.position}" data-coordinate="${u !== resolve(u.id) && u.wordRefs?.length ? "printed" : "canonical"}" aria-label="Écouter le mot ${e(w.text)}">${e(w.text)}</button>`
+            ? `<button type="button" class="quran-word ${wordPlaying === u.id + ":" + w.position ? "is-speaking" : ""}" data-action="listen-word" data-id="${e(u.id)}" data-position="${w.position}" data-coordinate="${u !== resolve(u.id) && u.wordRefs?.length ? "printed" : "canonical"}" aria-label="Écouter le mot ${e(w.text)}">${tajweedWord(w.text, u.id, w.position, u !== resolve(u.id) && u.wordRefs?.length ? "printed" : "canonical", tajweed, e)}</button>`
             : `<span class="quran-pause">${e(w.text)}</span>`,
         )
         .join(" ")}</p></article>`;

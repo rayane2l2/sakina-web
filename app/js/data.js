@@ -1,15 +1,21 @@
 import { MATN_SPECS, buildImportedMatn } from "./matn-corpus.js";
 import { buildPageUnits, splitPageUnits } from "./page-core.js";
 import { buildMacroIndex } from "./macro-plan.js";
-export let corpora, phonetics, pageIndex, pageUnits, quranMacroIndex;
+export let corpora,
+  phonetics,
+  pageIndex,
+  pageUnits,
+  quranMacroIndex,
+  tajweedData;
 let indexes, pageSections;
 export async function loadData() {
-  const [q, m, p, index, ...imported] = await Promise.all(
+  const [q, m, p, index, tajweed, ...imported] = await Promise.all(
     [
       "quran",
       "ibn-ashir",
       "phonemes",
       "page-index",
+      "tajweed",
       ...MATN_SPECS.map((s) => s.file),
     ].map(async (name) => {
       const r = await fetch(`data/${name}.json`);
@@ -17,6 +23,7 @@ export async function loadData() {
       return r.json();
     }),
   );
+  tajweedData = tajweed;
   const quran = q.surahs.map((s) => ({
     id: String(s.n),
     name: s.name,

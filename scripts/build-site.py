@@ -19,7 +19,7 @@ def build(source, destination):
     for path in paths:
         if path.is_symlink() or any(part.startswith('.') for part in path.relative_to(source).parts):
             raise ValueError('Hidden files and symlinks must not be published: ' + str(path))
-        if path.name == 'offline-files.json':
+        if path.name in ['offline-files.json', 'offline-manifest.json']:
             continue
         digest.update(path.relative_to(source).as_posix().encode('utf-8'))
         digest.update(b'\0')
@@ -35,8 +35,10 @@ def build(source, destination):
         path.write_text(text, encoding='utf-8')
     (destination / '.nojekyll').write_text('', encoding='utf-8')
     files = ['./'] + sorted(p.relative_to(destination).as_posix() for p in destination.rglob('*')
-                            if p.is_file() and p.name not in ['sw.js', 'offline-files.json', '.nojekyll'])
+                            if p.is_file() and p.name not in ['sw.js', 'offline-files.json', 'offline-manifest.json', '.nojekyll'])
     (destination / 'offline-files.json').write_text(json.dumps(files), encoding='utf-8')
+    revisions = {name: hashlib.sha256((destination / ('index.html' if name == './' else name)).read_bytes()).hexdigest() for name in files}
+    (destination / 'offline-manifest.json').write_text(json.dumps({'schema': 1, 'version': version, 'files': revisions}), encoding='utf-8')
     total = sum(p.stat().st_size for p in destination.rglob('*') if p.is_file())
     print(f'{len(files)} resources; {total / 1024**2:.1f} MiB; cache {version}')
     return version

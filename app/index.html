@@ -3,6 +3,6 @@
 if ('serviceWorker' in navigator) {
  const upgrading=Boolean(navigator.serviceWorker.controller);let reloaded=false;
  navigator.serviceWorker.addEventListener('controllerchange',()=>{if(upgrading&&!reloaded){reloaded=true;location.reload();}});
- navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).catch(()=>{});
+ navigator.serviceWorker.register('sw.js',{type:'module',updateViaCache:'none'}).catch(()=>{});
 }
 </script><script type="module" src="js/app.js"></script></body></html>

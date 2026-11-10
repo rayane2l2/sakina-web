@@ -96,3 +96,12 @@ Les 69 MP3 Guillaume du lot validé par l’utilisateur le 10 novembre 2026 sont
 ### Version 1.23.1
 
 Retrait de la mention de la voix sous chaque lecteur de hadith, sur demande de l’utilisateur. Audios et métadonnées conservés ; références des citations coraniques inchangées.
+
+
+## Version 1.24 — tajwid, révision cumulative et fichiers conservés
+
+Le mode Verset par verset affiche les annotations de tajwid de Quran.com, regroupées dans une palette de huit couleurs. Une légende repliée, avec une explication par couleur, apparaît au-dessus du texte. Les 6 236 versets sont couverts. Le texte canonique existant reste inchangé : seules des annotations sont projetées sur ses caractères. Les mots cliquables, les audios et le suivi vocal conservent leurs identifiants. Source : https://api-docs.quran.com/docs/content_apis_versioned/4.0.0/quran-verses-uthmani-tajweed/ ; durées en temps, selon la légende arabe officielle Quran.com. Le texte brut externe n’est jamais injecté en HTML. Une fermeture de balise superflue dans la source 32:3 est ignorée ; aucun texte n’est reconstruit.
+
+Sur demande explicite : pour les matans, tout l’acquis du programme revient chaque jour avant les nouvelles unités, sans appliquer l’ancien espacement individuel. Les chapitres consécutifs s’enchaînent, les trous réellement inconnus restent séparés. Après la fin de l’apprentissage, la récitation de tout le texte revient quotidiennement. Une validation du jour n’est pas redemandée le même jour ; le lendemain, elle revient. Exemple testé avec le moteur réel : après 30 jours à deux vers, révision 1–60 puis apprentissage 61–62. Le macro-plan Coran et FSRS des livres restent distincts et inchangés.
+
+La préparation hors connexion démarre automatiquement au premier lancement ou quand des fichiers manquent. Stockage durable sakina-offline-assets-v1, indépendant de la version de l’interface, avec révisions par empreinte SHA-256. Les anciens téléchargements correspondants sont migrés sans transfert réseau. Les mises à jour récupèrent uniquement les fichiers nouveaux ou modifiés ; une interruption conserve les fichiers terminés. Les caches historiques ne sont supprimés qu’après préparation complète. Les anciens et nouveaux lecteurs peuvent conserver leur propre révision d’un fichier. Le statut distingue les fichiers téléchargés de ceux conservés. La préparation inclut les ressources embarquées, livres, matans et modèle 3.1 ; les récitations coraniques externes se téléchargent toujours depuis la lecture. Aucun effacement du suivi ou des programmes.

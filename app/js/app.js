@@ -1,4 +1,6 @@
+import { createOfflineStore } from "./offline-cache.js";
 import { ReviewPageCursor, readingPlace } from "./review-continuation.js";
+import { dailyMatnPlan } from "./matn-plan.js";
 import { wordVoice } from "./quran-audio-sync.js";
 import {
   quranReadingMode,
@@ -99,6 +101,7 @@ import {
   pageIndex,
   pageUnits,
   quranMacroIndex,
+  tajweedData,
 } from "./data.js";
 import { load, save, day, validateBackup } from "./storage.js";
 import { wordsStatus } from "./alignment.js";
@@ -159,6 +162,8 @@ let db = load(),
   installPrompt = null,
   offlineBusy = false,
   offlineReady = false,
+  offlineDownloaded = 0,
+  offlineReused = 0,
   offlineCount = 0,
   offlineTotal = 0;
 const wordAudio = new QuranWordAudio();
@@ -222,7 +227,7 @@ function prog(p) {
   const value =
     p.corpus === "quran"
       ? macroPlan(p.memo, date, quranMacroIndex, M)
-      : M.plan(p.memo, date);
+      : dailyMatnPlan(p.memo, date, M);
   planCache.set(p.memo, { date, value });
   return value;
 }
@@ -333,6 +338,8 @@ function readerSheets() {
 }
 let layoutObserver;
 function render() {
+  const verseScroll=root.querySelector('.quran-verse-scroll'),verseTop=verseScroll?.scrollTop||0,verseKey=verseScroll?.querySelector('[data-verse-key]')?.dataset.verseKey;
+  const tajweedOpen=[...root.querySelectorAll('details.tajweed-legend, .tajweed-legend details')].map(el=>el.open);
   const formScroll = [
     ...root.querySelectorAll(
       ".selection-choices,.qa-choice-list,.quran-verse-scroll",
@@ -380,6 +387,8 @@ function render() {
   );
   layoutObserver?.disconnect();
   root.innerHTML = `<div class="shell ${view === "reader" ? "reading" : bookStudy ? "book-study" : ""}">${view !== "reader" && !bookStudy ? masthead() : ""}${view === "home" ? home() : view === "library" ? library() : view === "programs" ? programs() : view === "new" ? newProgram() : view === "books" ? books.render() : view === "reader" ? readerView() : settings()}</div>${view !== "reader" && !bookStudy ? nav() : ""}`;
+  root.querySelectorAll('details.tajweed-legend, .tajweed-legend details').forEach((el,i)=>{el.open=Boolean(tajweedOpen[i]);});
+  const nextVerseScroll=root.querySelector('.quran-verse-scroll');if(verseKey&&nextVerseScroll?.querySelector('[data-verse-key]')?.dataset.verseKey===verseKey)nextVerseScroll.scrollTop=verseTop;
   formScroll.forEach(({ selector, top }) => {
     const el = root.querySelector(selector);
     if (el) el.scrollTop = top;
@@ -551,16 +560,32 @@ function freshLabel(p) {
 function reviewOptions(p) {
   return {
     corpus: p.corpus,
+    chainMatn: p.corpus !== "quran",
     resolve: (id) => findUnit(p.corpus, id),
     sections: corpora[p.corpus].sections,
   };
 }
 function plannedReviews(p) {
   const x = prog(p);
-  return mergeReviewSteps([...x.recent, ...x.revision], reviewOptions(p));
+  const steps = mergeReviewSteps(
+    [...x.recent, ...x.revision],
+    reviewOptions(p),
+  );
+  return p.corpus === "quran"
+    ? steps
+    : steps.map((step) => ({
+        ...step,
+        dailyMatn: true,
+        label: "Révision quotidienne · tout l’acquis",
+      }));
 }
 function reviewSummary(p) {
   const groups = plannedReviews(p);
+  if (p.corpus !== "quran" && groups.length) {
+    const count = new Set(groups.flatMap((s) => s.ids)).size,
+      noun = corpora[p.corpus].unit;
+    return `Réciter tout l’acquis · ${count} ${noun}${count > 1 && noun !== "vers" ? "s" : ""}`;
+  }
   return groups.length
     ? groups
         .map((step) =>
@@ -628,7 +653,7 @@ function home() {
   const main = first
     ? `<section class="card today-card"><span class="tag">MA SÉANCE · ${first.kind === "book" ? "QUESTIONS-RÉPONSES" : esc(corpora[first.programme.corpus].name)}</span><h2>${esc(first.name)}</h2><p class="small muted">${first.kind === "book" ? questionSummary(first.review, first.fresh, first.waitingUntil) : `${esc(reviewSummary(first.programme))} · ${freshLabel(first.programme)}`}</p><button class="btn primary block" ${actionAttrs(first)}>${first.resume ? "Reprendre ma séance" : "Commencer ma séance"} ${icon("arrow")}</button></section>`
     : `<section class="card today-card"><h2>${db.programs.length || books.hasPrograms() ? "C’est tout pour aujourd’hui." : "Que veux-tu faire ?"}</h2>${db.programs.length || books.hasPrograms() ? button("Mes programmes", "nav", "secondary block", 'data-view="programs"') : `<div class="first-choices">${button("Lire le Coran", "read-quran", "primary block")}${button("Apprendre et réviser", "nav", "secondary block", 'data-view="programs"')}</div>`}</section>`;
-  return `<h1 class="home-heading">Prends un instant.<br>Il est pour toi.</h1>${main}${readingResumeButton()}${offlineReady ? "" : `<section class="card offline-invite"><span class="tag">RECOMMANDÉ</span><h2>Prépare Sakina.me sur cet appareil</h2><p class="small muted">Télécharge les textes et le modèle vocal 3.1 pour des séances plus fluides, même sans connexion.</p>${button(offlineBusy ? "Téléchargement en cours…" : "Télécharger les fichiers", "offline", "secondary block", offlineBusy ? "disabled" : "")}<p id="offline-progress" class="small muted" role="status">${offlineBusy ? `${offlineCount} / ${offlineTotal} fichiers` : "À faire une fois · facultatif"}</p></section>`}<div class="daily-other">${candidates
+  return `<h1 class="home-heading">Prends un instant.<br>Il est pour toi.</h1>${main}${readingResumeButton()}${offlineReady ? "" : `<section class="card offline-invite"><span class="tag">SUR CET APPAREIL</span><h2>Préparation hors connexion</h2><p class="small muted">Téléchargement automatique. Les fichiers déjà présents sont conservés.</p>${button(offlineBusy ? "Préparation en cours…" : "Reprendre la préparation", "offline", "secondary block", offlineBusy ? "disabled" : "")}<p id="offline-progress" class="small muted" role="status">${offlineBusy ? `${offlineDownloaded} téléchargés · ${offlineReused} conservés` : "La préparation reprend là où elle s’est arrêtée."}</p></section>`}<div class="daily-other">${candidates
     .slice(1)
     .map(
       (p) =>
@@ -847,6 +872,7 @@ function readerView() {
                 size: db.settings.quranTextSize,
                 wordPlaying: playingWord,
                 showHint: !db.settings.wordHintSeen,
+                tajweed: tajweedData,
                 pageNavigation: session
                   ? null
                   : { first: reader.page <= 1, last: reader.page >= 604 },
@@ -855,9 +881,10 @@ function readerView() {
             )
           : "",
       swipeHint: !db.settings.quranSwipeSeen,
-      title: s.name,
-      subtitle:
-        corpus === "quran"
+      title: session?.current.dailyMatn ? corpora[corpus].name : s.name,
+      subtitle: session?.current.dailyMatn
+        ? "Tout l’acquis · récitation quotidienne"
+        : corpus === "quran"
           ? `Page ${sheet.page} · ${session ? (session.current.kind === "review" ? "révision" : "portion du jour") : "lecture libre"}`
           : `${corpora[corpus].unit === "vers" ? "Vers" : "Passage"} ${units[0].n}${units.length > 1 ? "–" + units.at(-1).n : ""} · ${s.name}`,
       session: Boolean(session),
@@ -878,8 +905,9 @@ function readerView() {
             )
           : "",
       recognitionAllowed: recognitionAvailable(corpus, session?.current),
-      stepTitle:
-        session?.current.kind === "review"
+      stepTitle: session?.current.dailyMatn
+        ? `Récite ${units.length > 1 ? "les" : "le"} ${corpora[corpus].unit}${units.length > 1 && corpora[corpus].unit !== "vers" ? "s" : ""} ${units[0].n}${units.length > 1 ? " à " + units.at(-1).n : ""}`
+        : session?.current.kind === "review"
           ? reviewRangeLabel(units, reviewOptions(session.program))
           : session?.current.label,
       practiceKind: session?.current.practiceKind || session?.current.kind,
@@ -1003,7 +1031,7 @@ function reminderItems(at = new Date()) {
     const x =
       p.corpus === "quran"
         ? macroPlan(p.memo, date, quranMacroIndex, M)
-        : M.plan(p.memo, date);
+        : dailyMatnPlan(p.memo, date, M);
     const ids = [...x.recent, ...x.revision].flatMap((b) => b.ids || []),
       id = ids[0] || x.fresh[0];
     const name =
@@ -1069,7 +1097,7 @@ function settings() {
           })
           .join("")
       : '<p class="muted">Une étoile dans la lecture, et tu retrouves ton passage ici.</p>'
-  }</section><details class="card"><summary>À propos du suivi vocal</summary><p class="small muted">Sakina.me · version 1.23.1</p><p>Zipformer Quran v3.1 · Quran Lab, via ReciteQuran et le moteur local sherpa-onnx. Reconnaissance des phonèmes en Hafs. Retours expérimentaux, sans validation automatique du tajwid.</p><p>Application personnelle et gratuite. Aucune publicité, aucun compte, aucun envoi d’audio.</p><a href="vendor/LICENSE-ReciteQuran.txt">Conditions ReciteQuran</a> · <a href="THIRD_PARTY_NOTICES.txt">Sources et licences</a></details>`;
+  }</section><details class="card"><summary>À propos du suivi vocal</summary><p class="small muted">Sakina.me · version 1.24</p><p>Zipformer Quran v3.1 · Quran Lab, via ReciteQuran et le moteur local sherpa-onnx. Reconnaissance des phonèmes en Hafs. Retours expérimentaux, sans validation automatique du tajwid.</p><p>Application personnelle et gratuite. Aucune publicité, aucun compte, aucun envoi d’audio.</p><a href="vendor/LICENSE-ReciteQuran.txt">Conditions ReciteQuran</a> · <a href="THIRD_PARTY_NOTICES.txt">Sources et licences</a></details>`;
 }
 async function resetVoice() {
   errorStreak.reset();
@@ -2386,53 +2414,74 @@ async function action(el) {
       );
   }
 }
-async function offlineInventory() {
-  const r = await fetch("offline-files.json", { cache: "no-cache" });
-  if (!r.ok) throw Error("La liste des fichiers est indisponible.");
-  return r.json();
+let offlineStorePromise;
+async function offlineStore() {
+  if (!offlineStorePromise)
+    offlineStorePromise = (async () => {
+      const response = await fetch("offline-manifest.json", {
+        cache: "no-cache",
+      });
+      if (!response.ok)
+        throw Error("L’inventaire hors connexion est indisponible.");
+      return createOfflineStore({
+        manifest: await response.json(),
+        baseURL: location.href,
+        shellCache: "sakina-recite-v34",
+      });
+    })().catch((error) => {
+      offlineStorePromise = null;
+      throw error;
+    });
+  return offlineStorePromise;
 }
 async function checkOffline() {
   try {
-    const files = await offlineInventory(),
-      cache = await caches.open("sakina-recite-v32"),
-      keys = new Set((await cache.keys()).map((r) => r.url));
-    offlineReady = files.every((f) => keys.has(new URL(f, location.href).href));
-    if (view === "home") render();
+    offlineReady = await (await offlineStore()).ready();
   } catch {
     offlineReady = false;
   }
+  if (view === "home") render();
+  return offlineReady;
 }
 async function prepareOffline(el) {
-  if (offlineBusy) return;
+  if (offlineBusy || !("caches" in globalThis)) return;
   offlineBusy = true;
-  el.disabled = true;
+  if (el) el.disabled = true;
+  if (view === "home" || view === "settings") render();
   try {
-    if ("serviceWorker" in navigator) await navigator.serviceWorker.ready;
-    const files = await offlineInventory(),
-      cache = await caches.open("sakina-recite-v32");
-    offlineCount = 0;
-    offlineTotal = files.length;
-    for (const file of files) {
-      if (!(await cache.match(file))) {
-        const r = await fetch(file);
-        if (!r.ok) throw Error("Téléchargement incomplet : " + file);
-        await cache.put(file, r);
-      }
-      offlineCount++;
-      const p = document.querySelector("#offline-progress");
-      if (p)
-        p.textContent = `${offlineCount} / ${offlineTotal} fichiers conservés`;
-    }
+    if ("serviceWorker" in navigator)
+      await Promise.race([
+        navigator.serviceWorker.ready,
+        new Promise((resolve) => setTimeout(resolve, 10000)),
+      ]);
+    await (
+      await offlineStore()
+    ).prepare(({ checked, total, downloaded, reused }) => {
+      offlineCount = checked;
+      offlineTotal = total;
+      offlineDownloaded = downloaded;
+      offlineReused = reused;
+      const progress = document.querySelector("#offline-progress");
+      if (progress)
+        progress.textContent = `${downloaded} téléchargés · ${reused} conservés`;
+    });
     offlineReady = true;
-    toast("Textes, livres, matans et modèle 3.1 prêts sur cet appareil.");
-  } catch (e) {
-    toast(e.message + " Tu peux relancer pour reprendre le téléchargement.");
+    await navigator.storage?.persist?.().catch(() => {});
+    toast("Sakina est prête hors connexion.");
+  } catch (error) {
+    toast(
+      error.message +
+        " La préparation reprendra sans effacer les fichiers conservés.",
+    );
   } finally {
     offlineBusy = false;
-    el.disabled = false;
+    if (el?.isConnected) el.disabled = false;
     if (view === "home" || view === "settings") render();
   }
 }
+window.addEventListener("online", () => {
+  if (!offlineReady && !offlineBusy) void prepareOffline();
+});
 root.addEventListener("click", (e) => {
   const el = e.target.closest("[data-action]");
   if (el && !el.disabled) action(el).catch((error) => toast(error.message));
@@ -2816,7 +2865,9 @@ try {
   stateSave();
   await reminders.init().catch(() => {});
   render();
-  checkOffline();
+  void checkOffline().then(() => {
+    if (!offlineReady && navigator.onLine) void prepareOffline();
+  });
 } catch (error) {
   root.innerHTML = `<div class="boot"><h1>La bibliothèque n’a pas pu s’ouvrir.</h1><p>${esc(error.message)}</p><button onclick="location.reload()">Réessayer</button></div>`;
 }

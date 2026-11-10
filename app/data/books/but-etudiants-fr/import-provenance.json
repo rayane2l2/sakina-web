@@ -1,0 +1,15 @@
+{
+  "bookId": "le-but-des-etudiants",
+  "editionId": "but-etudiants-fr",
+  "questions": 233,
+  "chapters": 13,
+  "hadiths": 69,
+  "sha256Verified": 69,
+  "quranQuotations": 118,
+  "quranReciter": "minshawi",
+  "otherBookFilesUnchanged": 245,
+  "acceptedBy": "user",
+  "date": "2026-11-10",
+  "manifestSha256": "96d1c84c1b5eb6f392c6951ed184d3633f90c940596d989085b364def2e7c8e1",
+  "deliverySha256": "81f6e28066acd42eaa2fb85887e5d28def953d159428793620efcce6310a6358"
+}

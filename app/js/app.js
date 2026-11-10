@@ -1069,7 +1069,7 @@ function settings() {
           })
           .join("")
       : '<p class="muted">Une étoile dans la lecture, et tu retrouves ton passage ici.</p>'
-  }</section><details class="card"><summary>À propos du suivi vocal</summary><p class="small muted">Sakina.me · version 1.22</p><p>Zipformer Quran v3.1 · Quran Lab, via ReciteQuran et le moteur local sherpa-onnx. Reconnaissance des phonèmes en Hafs. Retours expérimentaux, sans validation automatique du tajwid.</p><p>Application personnelle et gratuite. Aucune publicité, aucun compte, aucun envoi d’audio.</p><a href="vendor/LICENSE-ReciteQuran.txt">Conditions ReciteQuran</a> · <a href="THIRD_PARTY_NOTICES.txt">Sources et licences</a></details>`;
+  }</section><details class="card"><summary>À propos du suivi vocal</summary><p class="small muted">Sakina.me · version 1.23</p><p>Zipformer Quran v3.1 · Quran Lab, via ReciteQuran et le moteur local sherpa-onnx. Reconnaissance des phonèmes en Hafs. Retours expérimentaux, sans validation automatique du tajwid.</p><p>Application personnelle et gratuite. Aucune publicité, aucun compte, aucun envoi d’audio.</p><a href="vendor/LICENSE-ReciteQuran.txt">Conditions ReciteQuran</a> · <a href="THIRD_PARTY_NOTICES.txt">Sources et licences</a></details>`;
 }
 async function resetVoice() {
   errorStreak.reset();
@@ -2394,7 +2394,7 @@ async function offlineInventory() {
 async function checkOffline() {
   try {
     const files = await offlineInventory(),
-      cache = await caches.open("sakina-recite-v30"),
+      cache = await caches.open("sakina-recite-v31"),
       keys = new Set((await cache.keys()).map((r) => r.url));
     offlineReady = files.every((f) => keys.has(new URL(f, location.href).href));
     if (view === "home") render();
@@ -2409,7 +2409,7 @@ async function prepareOffline(el) {
   try {
     if ("serviceWorker" in navigator) await navigator.serviceWorker.ready;
     const files = await offlineInventory(),
-      cache = await caches.open("sakina-recite-v30");
+      cache = await caches.open("sakina-recite-v31");
     offlineCount = 0;
     offlineTotal = files.length;
     for (const file of files) {

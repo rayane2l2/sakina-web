@@ -82,3 +82,12 @@ Les mots utilisent par défaut les fichiers individuels publics Quran.com (audio
 Le suivi audio ne surligne que le mot dans son intervalle réel ; les pauses et repères indisponibles restent neutres. Données propres à Minshawy_Murattal_128kbps, Alafasy_128kbps et Husary_64kbps : l’audio Husary utilise donc la version 64 kb/s correspondante. Les six différences de découpage du texte imprimé sont explicitement reliées, sans modifier le texte fourni. Aucun repère d’un récitateur n’est appliqué à un autre.
 
 Révision du Coran : un changement de page conserve le micro et la référence complète de révision. Passage automatique après le dernier mot reconnu de la page. Après un arrêt volontaire, le micro reprend au début de la page affichée ; les mots précédents ne sont pas évalués comme des omissions. Livraison web uniquement.
+
+
+## Version 1.23 — Le But des étudiants
+
+Nouveau livre questions-réponses français : 233 questions et 13 chapitres, avec sélection complète, par chapitre, par plages ou par questions, quota quotidien et FSRS existant. Aucun changement de l’autre livre ni de son historique.
+
+Les 69 MP3 Guillaume du lot validé par l’utilisateur le 10 novembre 2026 sont importés sans réencodage, après vérification intégrale des SHA-256, du format et des durées. Chaque citation est reliée à une question par son texte arabe et sa page ; les deux occurrences répétées sont distinguées par leur contexte. Les cartes affichent la vocalisation fournie avec le lot. Le texte du PDF est extrait en conservant l’ordre logique des ligatures arabes, sans captures du livre dans les cartes.
+
+118 citations coraniques utilisent les glyphes canoniques déjà présents dans Sakina et des extraits Minshawi délimités selon les mots cités. Les références répétées sont désambiguïsées avec les références françaises du PDF. Aucun audio coranique synthétique. Le PDF source reste hors du site. Textes et médias du nouveau livre sont inclus dans les ressources hors connexion.

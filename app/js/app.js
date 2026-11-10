@@ -1,3 +1,4 @@
+import {createProgramWizard} from './program-wizard.js';
 import { createOfflineStore } from "./offline-cache.js";
 import { ReviewPageCursor, readingPlace } from "./review-continuation.js";
 import { dailyMatnPlan } from "./matn-plan.js";
@@ -338,6 +339,7 @@ function readerSheets() {
 }
 let layoutObserver;
 function render() {
+  const previousMushaf=root.querySelector("#printed-mushaf"),mushafTop=previousMushaf?.parentElement.scrollTop,mushafPage=previousMushaf?.dataset.currentPage;
   const verseScroll=root.querySelector('.quran-verse-scroll'),verseTop=verseScroll?.scrollTop||0,verseKey=verseScroll?.querySelector('[data-verse-key]')?.dataset.verseKey;
   const tajweedOpen=[...root.querySelectorAll('details.tajweed-legend, .tajweed-legend details')].map(el=>el.open);
   const formScroll = [
@@ -446,7 +448,7 @@ function render() {
       const sheets = readerSheets(),
         sheet = sheets[Math.min(reader.sheet || 0, sheets.length - 1)];
       mountMushaf({
-        units: sheet.units,
+        units: session ? currentUnits() : corpora.quran.sections.flatMap(s=>s.units),
         hidden: isHidden(),
         fullPage: true,
         revealRecognized: recognitionAvailable(
@@ -456,8 +458,11 @@ function render() {
         learning: learningAppearance(),
         playing,
         playingWord: playingPrintedWord,
-        pageNumbers: [sheet.page],
-        statuses: statusesFor(sheet.units),
+        pageNumbers: session ? sheets.map(s=>s.page) : Array.from({length:604},(_,i)=>i+1),
+        initialPage: sheet.page,
+        scrollTop: Number(mushafPage)===sheet.page ? mushafTop : null,
+        onPage: (page)=>{const host=root.querySelector("#printed-mushaf");if(host)host.dataset.currentPage=page;if(session){const index=sheets.findIndex(s=>s.page===page);if(index>=0)reader.sheet=index;}else{if(!recognition.active){reader.page=page;const unit=pageUnits.find(u=>u.page===page);if(unit?.wordRefs[0])reader.sid=String(unit.wordRefs[0].s);}const title=root.querySelector(".reader-head h1"),subtitle=root.querySelector(".reader-head .small");if(title)title.textContent=section("quran",reader.sid).name;if(subtitle)subtitle.textContent=`Page ${page} · lecture libre`;const position=root.querySelector(".quran-page-position");if(position)position.textContent=`${page} / 604`;}},
+        statuses: statusesFor(session ? currentUnits() : corpora.quran.sections.flatMap(s=>s.units)),
         revealedAyahs: reader.revealedAyahs || [],
         onVerse: (id) => {
           if (!session) {
@@ -783,7 +788,12 @@ function applyPrior(p, form) {
     ),
   };
 }
+let programWizard;
+function guide(){return programWizard??=createProgramWizard({corpora,index:pageIndex,M,resolve:findUnit,today:day,refresh:render,onExit:()=>{view="programs";render();},onBooks:()=>{view="books";render();},onSave:(p,start)=>{if(db.programs.some(x=>x.id===p.id))db.programs=db.programs.map(x=>x.id===p.id?p:x);else db.programs.push(p);stateSave();editing=null;if(start)void startProgram(p.id).catch(e=>toast(e.message));else{view="programs";render();}toast("Programme enregistré.");}});}
 function newProgram() {
+  return guide().render()+(editing?`<div class="qa-manage-actions">${button("Mettre en pause / réactiver","pause-program","secondary",`data-id="${editing}"`)}${button("Archiver","archive-program","secondary",`data-id="${editing}"`)}${button("Supprimer ce programme","delete-program","danger",`data-id="${editing}"`)}</div>`:"");
+}
+function legacyNewProgram() {
   if (!editing) draft.selectionRows ??= [{ section: draft.sid, whole: true }];
   const c = corpora[draft.corpus],
     s = section(draft.corpus, draft.sid),
@@ -880,7 +890,7 @@ function readerView() {
               esc,
             )
           : "",
-      swipeHint: !db.settings.quranSwipeSeen,
+      swipeHint: false,
       title: session?.current.dailyMatn ? corpora[corpus].name : s.name,
       subtitle: session?.current.dailyMatn
         ? "Tout l’acquis · récitation quotidienne"
@@ -1097,7 +1107,7 @@ function settings() {
           })
           .join("")
       : '<p class="muted">Une étoile dans la lecture, et tu retrouves ton passage ici.</p>'
-  }</section><details class="card"><summary>À propos du suivi vocal</summary><p class="small muted">Sakina.me · version 1.24.1</p><p>Zipformer Quran v3.1 · Quran Lab, via ReciteQuran et le moteur local sherpa-onnx. Reconnaissance des phonèmes en Hafs. Retours expérimentaux, sans validation automatique du tajwid.</p><p>Application personnelle et gratuite. Aucune publicité, aucun compte, aucun envoi d’audio.</p><a href="vendor/LICENSE-ReciteQuran.txt">Conditions ReciteQuran</a> · <a href="THIRD_PARTY_NOTICES.txt">Sources et licences</a></details>`;
+  }</section><details class="card"><summary>À propos du suivi vocal</summary><p class="small muted">Sakina.me · version 1.25</p><p>Zipformer Quran v3.1 · Quran Lab, via ReciteQuran et le moteur local sherpa-onnx. Reconnaissance des phonèmes en Hafs. Retours expérimentaux, sans validation automatique du tajwid.</p><p>Application personnelle et gratuite. Aucune publicité, aucun compte, aucun envoi d’audio.</p><a href="vendor/LICENSE-ReciteQuran.txt">Conditions ReciteQuran</a> · <a href="THIRD_PARTY_NOTICES.txt">Sources et licences</a></details>`;
 }
 async function resetVoice() {
   errorStreak.reset();
@@ -1208,7 +1218,7 @@ function attachRecognition() {
           offset += u.wordRefs?.length || u.text.split(/\s+/).length;
         }
         updateMushaf(
-          statusesFor(readerSheets()[reader.sheet || 0].units),
+          statusesFor(session ? currentUnits() : corpora.quran.sections.flatMap(s=>s.units)),
           isHidden(),
         );
         const ordinary =
@@ -1801,6 +1811,7 @@ async function advanceMastered() {
   if (session.phase === "listen" && lessonOptions().needsAudio) await listen();
 }
 async function action(el) {
+  if(el.dataset.guide){guide().action(el);return;}
   const a = el.dataset.action;
   if (a === "reminder-test") {
     await reminders.test();
@@ -2056,6 +2067,7 @@ async function action(el) {
     await openReader(c, sid, index);
   }
   if (a === "new") {
+    guide().reset();
     editing = null;
     draft = {
       corpus: "quran",
@@ -2083,6 +2095,7 @@ async function action(el) {
   if (a === "edit") {
     const p = db.programs.find((p) => p.id === el.dataset.id);
     editing = p.id;
+    guide().reset(p);
     draft = {
       corpus: p.corpus,
       sid: p.sid,
@@ -2426,7 +2439,7 @@ async function offlineStore() {
       return createOfflineStore({
         manifest: await response.json(),
         baseURL: location.href,
-        shellCache: "sakina-recite-v35",
+        shellCache: "sakina-recite-v36",
       });
     })().catch((error) => {
       offlineStorePromise = null;
@@ -2483,12 +2496,12 @@ window.addEventListener("online", () => {
   if (!offlineReady && !offlineBusy) void prepareOffline();
 });
 root.addEventListener("click", (e) => {
-  const el = e.target.closest("[data-action]");
+  const el = e.target.closest("[data-action],[data-guide]");
   if (el && !el.disabled) action(el).catch((error) => toast(error.message));
 });
 bindQuranPages(root, {
   enabled: () =>
-    view === "reader" && currentCorpus() === "quran" && !verseMode(),
+    false, // Mushaf navigation is vertical; swipe page turning is retired.
   onError: toast,
   onTurn: async (delta) => {
     const move = nextQuranPage(
@@ -2534,6 +2547,7 @@ bindSpeedControls(root, {
   },
 });
 root.addEventListener("input", (e) => {
+  if(view==="new"&&guide().input(e.target))return;
   if (e.target.id === "search") {
     search = e.target.value;
     document.querySelector("#section-list").innerHTML = libraryResults();
@@ -2559,6 +2573,7 @@ root.addEventListener("input", (e) => {
 root.addEventListener("change", async (e) => {
   const el = e.target;
   try {
+    if(view==="new"&&guide().change(el))return;
     if (el.closest("#program-form")) {
       if (
         el.hasAttribute("data-select-section") ||

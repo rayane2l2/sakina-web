@@ -54,7 +54,8 @@ export function createBooksUI(host) {
     grading = false,
     saving = false,
     selectedBook = null,
-    formReturn = "list";
+    formReturn = "list",
+    wizardStep = 0;
   const editions = new Map(),
     state = () => {
       const db = host.state();
@@ -182,6 +183,7 @@ export function createBooksUI(host) {
   function newDraft(data, p = null) {
     formReturn = ["edition", "editions"].includes(mode) ? mode : "list";
     edition = data;
+    wizardStep=0;
     editing = p?.id || null;
     draft = {
       name: p?.name || data.title,
@@ -192,7 +194,7 @@ export function createBooksUI(host) {
       ranges: p?.selection?.ranges?.map((r) => ({ ...r })) || [
         { from: 1, to: 25 },
       ],
-      retention: p?.retention || 0.95,
+      retention: p?.retention || 0.9,
     };
     mode = "form";
     session = null;
@@ -275,7 +277,7 @@ export function createBooksUI(host) {
       return `<section class="card"><h2>Livres</h2><p>${E(error)}</p></section>`;
     return `<div class="page-title"><h1>Livres</h1></div>${state().programs.length ? `<div class="section-head"><h2 class="section-title">Mes programmes</h2>${B("+ Nouveau programme", "create", "secondary compact")}</div>${groupedCards()}` : ""}<h2 class="section-title">Les livres</h2>${catalog?.books.map((book) => `<article class="card qa-book" role="button" tabindex="0" data-book-action="open-book" data-book="${E(book.id)}" aria-label="Ouvrir ${E(book.title)}"><span class="qa-book-symbol" aria-hidden="true">▤</span><div><h3>${E(book.title)}</h3><p class="small muted">Questions-réponses</p><div class="row">${book.editions.map((ed) => B(ed.label, book.editions.length === 1 ? "open-book" : "open-edition", "secondary compact", book.editions.length === 1 ? `data-book="${E(book.id)}"` : `data-edition="${E(ed.id)}"`)).join("")}</div></div></article>`).join("") || "<p>Chargement des livres…</p>"}`;
   }
-  function form() {
+  function legacyForm() {
     const ed = edition,
       selection = draft.mode;
     return `<div class="page-title"><h1>${editing ? "Modifier" : "Créer"} mon programme</h1></div><form id="book-program-form" class="card form-card"><div class="qa-book-title"><h2>${E(ed.title)}</h2><small>${ed.language === "fr" ? "Français" : "العربية"} · ${ed.questions.length} questions</small></div><label>Nom du programme<input name="name" maxlength="80" value="${E(draft.name)}" required></label><p class="qa-form-label">Ce que je veux apprendre</p><div class="seg qa-modes">${[
@@ -295,6 +297,22 @@ export function createBooksUI(host) {
       .join(
         "",
       )}</div>${selection === "all" ? '<p class="small muted">Toutes les questions, dans l’ordre du livre.</p>' : selection === "chapters" ? `<div class="qa-choice-list">${ed.chapters.map((ch) => `<label style="${ch.parentId ? "padding-left:16px" : ""}"><input type="checkbox" name="chapters" value="${E(ch.id)}" ${draft.chapters.includes(ch.id) ? "checked" : ""}>${E(ch.title)}</label>`).join("")}</div>` : selection === "individual" ? `<div class="qa-choice-list">${ed.questions.map((q) => `<label><input type="checkbox" name="questions" value="${E(q.id)}" ${draft.ids.includes(q.id) ? "checked" : ""}>${q.number}${q.occurrence > 1 ? " (2e)" : ""} · ${E(q.searchText.slice(0, 90))}</label>`).join("")}</div>` : `<div class="qa-ranges">${draft.ranges.map((r, i) => `<div class="qa-range"><label>De la question<input data-from type="number" min="1" max="${Math.max(...ed.questions.map((q) => q.number))}" value="${r.from}" required></label><label>À la question<input data-to type="number" min="1" max="${Math.max(...ed.questions.map((q) => q.number))}" value="${r.to}" required></label>${draft.ranges.length > 1 ? B("×", "remove-range", "text", `data-index="${i}" aria-label="Retirer cette plage"`) : ""}</div>`).join("")}</div>${B("+ Ajouter une plage", "add-range", "text")}`}<label>Nouvelles questions par jour<input name="newPerDay" type="number" min="0" max="1000" value="${draft.newPerDay}" required></label><details><summary>Réglages de révision</summary><label>Rétention souhaitée<select name="retention">${[0.8, 0.85, 0.9, 0.95, 0.97, 0.99].map((r) => `<option value="${r * 100}" ${r === draft.retention ? "selected" : ""}>${Math.round(r * 100)} %</option>`).join("")}</select></label><p class="small muted">FSRS-6 · étapes d’apprentissage 1 min et 10 min, réapprentissage 10 min. Les échéances s’adaptent à chaque carte.</p></details><p class="small muted">Les révisions dues passent avant les nouvelles questions.</p><button class="btn primary block" type="submit">${editing ? "Enregistrer" : "Créer et commencer"}</button>${B("Réviser librement cette sélection", "practice-draft", "secondary block")}${editing ? `<div class="qa-manage-actions">${B(state().programs.find((p) => p.id === editing)?.paused ? "Réactiver" : "Mettre en pause", "pause", "secondary", `data-id="${E(editing)}"`)}${B("Archiver", "archive", "secondary", `data-id="${E(editing)}"`)}${B("Supprimer ce programme", "delete", "danger", `data-id="${E(editing)}"`)}</div>` : ""}</form>${B("Retour aux livres", "list", "text")}`;
+  }
+  function form(){
+    const html=legacyForm(),doc=new DOMParser().parseFromString(html,'text/html'),form=doc.querySelector('form');
+    form.querySelector('.qa-book-title')?.remove();
+    const stages=[doc.createElement('section'),doc.createElement('section'),doc.createElement('section')];
+    for(const child of [...form.children]){let stage=0;if(child.matches('label')&&child.querySelector('[name="newPerDay"]'))stage=1;else if(child.tagName==='DETAILS'||child.matches('[type="submit"],.qa-manage-actions')||child.matches('label')&&child.querySelector('[name="name"]'))stage=2;else if(child.hasAttribute('data-book-action')&&['practice-draft'].includes(child.dataset.bookAction))stage=2;else if(child.classList.contains('small'))stage=1;stages[stage].append(child);}
+    const advanced=stages[2].querySelector('details');if(advanced){const retention=advanced.querySelector('select'),label=advanced.querySelector('label');const input=doc.createElement('input');input.type='number';input.name='retention';input.min='70';input.max='99';input.value=draft.retention*100;retention.replaceWith(input);advanced.replaceWith(label);}
+    const submit=stages[2].querySelector('[type="submit"]');if(submit)submit.textContent=editing?'Enregistrer':'Lancer mon premier entraînement';
+    const select=stages[0].querySelector('.qa-modes');if(select)select.classList.add('guide-scope');
+    const heading=['Que veux-tu apprendre dans ce livre ?','Combien de nouvelles questions par jour ?','Ton programme est prêt.'][wizardStep];
+    const pace=stages[1].querySelector('[name="newPerDay"]');if(pace)pace.parentElement.insertAdjacentHTML('beforebegin',`<div class="guide-pace-options">${[3,5,10].map(n=>B(`${n} questions par jour`,'wizard-pace',`guide-choice ${n===draft.newPerDay?'selected':''}`,`data-value="${n}"`)).join('')}</div>`);
+    form.className='guide-book-form';form.innerHTML=`<header class="guide-book-progress"><span>${wizardStep+1} sur 3</span><div class="progress"><i style="width:${100*(wizardStep+1)/3}%"></i></div></header><h2>${heading}</h2><p class="small muted">${E(edition.title)}</p>`;
+    stages.forEach((section,i)=>{section.hidden=i!==wizardStep;section.className='guide-book-stage';form.append(section);});
+    if(wizardStep<2)form.insertAdjacentHTML('beforeend',B('Continuer →','wizard-next','primary block guide-sticky'));
+    if(wizardStep>0)form.insertAdjacentHTML('beforeend',B('‹ Retour','wizard-back','text block'));
+    return form.outerHTML;
   }
   function prepareCard() {
     const p = program();
@@ -377,7 +395,7 @@ export function createBooksUI(host) {
     const p = program(),
       now = new Date();
     session.preview = previewGrades(
-      { ...state(), retention: p.retention || 0.95 },
+      { ...state(), retention: p.retention || 0.9 },
       edition.id,
       session.questionId,
       now,
@@ -478,6 +496,8 @@ export function createBooksUI(host) {
     }
     e.preventDefault();
     const a = el.dataset.bookAction;
+    if(a==='wizard-next'||a==='wizard-back'){capture();if(a==='wizard-next'&&draft.mode==='individual'&&!draft.ids.length){host.toast('Choisis au moins une question.');return;}if(a==='wizard-next'&&draft.mode==='chapters'&&!draft.chapters.length){host.toast('Choisis au moins un chapitre.');return;}wizardStep=Math.max(0,Math.min(2,wizardStep+(a==='wizard-next'?1:-1)));refresh();return;}
+    if(a==='wizard-pace'){capture();draft.newPerDay=Number(el.dataset.value);refresh();return;}
     try {
       if (a !== "audio") stopAudio();
       if (a === "practice-shuffle") {
@@ -734,6 +754,7 @@ export function createBooksUI(host) {
   async function submit(e) {
     if (e.target.id !== "book-program-form") return;
     e.preventDefault();
+    if(wizardStep<2){capture();wizardStep++;refresh();return;}
     if (saving) return;
     saving = true;
     const submitButton = e.target.querySelector("[type=submit]");
@@ -952,6 +973,7 @@ export function createBooksUI(host) {
       }
     },
     back: () => {
+      if(mode==="form"&&wizardStep>0){capture();wizardStep--;refresh();return;}
       stopAudio();
       checkpoint();
       const returnTo = session?.returnTo;

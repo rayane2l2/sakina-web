@@ -49,6 +49,7 @@
   }
 
   function paceLabel(state, unit = 'verset') {
+    if (measureOf(state) === 'line') return `${state.pace} ligne${state.pace>1?'s':''}`;
     if (measureOf(state) === 'page') return PAGE_LABELS[PAGE_PACES.indexOf(nearestPage(state.pace))];
     return `${state.pace} ${unit}${state.pace > 1 && !unit.endsWith('s') ? 's' : ''}`;
   }
@@ -60,7 +61,7 @@
       units: [...units],
       queue: [...learn],
       measure,
-      sizes: measure === 'page' && sizes ? { ...sizes } : null,
+      sizes: measure !== 'ayah' && sizes ? { ...sizes } : null,
       pace: toPace(measure, pace),
       group: toInt(group, 1, 10, DEFAULTS.group),
       recentDays: toInt(recentDays, 1, 60, DEFAULTS.recentDays),
@@ -87,7 +88,7 @@
 
   /* ---------- Apprentissage ---------- */
   /* Taille d'une unité dans la mesure du rythme (1 par verset, fraction de page sinon). */
-  const sizeOf = (state, id) => (measureOf(state) === 'page' && state.sizes ? state.sizes[id] ?? 0 : 1);
+  const sizeOf = (state, id) => (measureOf(state) !== 'ayah' && state.sizes ? state.sizes[id] ?? 0 : 1);
   const amount = (state, ids) => ids.reduce((sum, id) => sum + sizeOf(state, id), 0);
   const learnedOn = (state, date) =>
     amount(state, Object.keys(state.items).filter((id) => state.items[id].first === date));
@@ -198,7 +199,7 @@
   const setGroup = (state, group) => ({ ...state, group: toInt(group, 1, 10, DEFAULTS.group) });
 
   function setMeasure(state, measure, sizes = null) {
-    if (measure === 'page') return { ...state, measure, sizes: { ...sizes }, pace: 1 };
+    if (measure === 'page' || measure === 'line') return { ...state, measure, sizes: { ...sizes }, pace: 1 };
     return { ...state, measure: 'ayah', sizes: null, pace: DEFAULTS.pace };
   }
 

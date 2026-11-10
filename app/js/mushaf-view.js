@@ -36,136 +36,34 @@ async function loadPage(n) {
   // A handful of pages, not the entire mushaf, stays in WASM memory.
   if (cache.size > 6) {
     const key = cache.keys().next().value;
-    if (key !== n) {
+    if (key !== n && !current?.canvases.some(entry=>entry.page===cache.get(key))) {
       cache.get(key).free();
       cache.delete(key);
     }
   }
   return page;
 }
-export async function mountMushaf({
-  units,
-  hidden = false,
-  fullPage = false,
-  pageNumbers,
-  onVerse,
-  statuses = [],
-  revealedAyahs = [],
-  revealRecognized = false,
-  learning = null,
-  playing = null,
-  playingWord = null,
-}) {
-  const host = document.querySelector("#printed-mushaf");
-  if (!host) return;
-  const token = ++revision;
-  host.innerHTML = '<p class="small muted center">Ouverture du mushaf…</p>';
-  current = {
-    units,
-    hidden,
-    fullPage,
-    onVerse,
-    statuses,
-    revealedAyahs,
-    revealRecognized,
-    learning,
-    playing,
-    playingWord,
-    canvases: [],
-  };
-  const config = current;
-  const keys = new Set(),
-    ayahs = new Set(units.map((u) => u.id));
-  units.forEach((u) => u.wordRefs?.forEach((w) => keys.add(wordKey(w))));
-  try {
-    const pages = await Promise.all(pageNumbers.map(getPage));
-    if (token !== revision) return;
-    host.innerHTML = "";
-    for (const page of pages) {
-      const chosen = learning
-        ? page.words
-        : page.words.filter((w) =>
-            keys.size
-              ? keys.has(`${w.surah}:${w.ayah}:${w.word}`)
-              : ayahs.has(`${w.surah}:${w.ayah}`),
-          );
-      if (!chosen.length) continue;
-      const from = fullPage
-          ? 0
-          : Math.max(0, Math.min(...chosen.map((w) => w.y0)) - 12),
-        to = fullPage
-          ? page.height
-          : Math.min(page.height, Math.max(...chosen.map((w) => w.y1)) + 12);
-      const paper = document.createElement("section");
-      paper.className = "printed-page";
-      const caption = document.createElement("div");
-      caption.className = "printed-caption";
-      caption.textContent = `${fullPage ? "Page" : "Portion de la page"} ${page.page}`;
-      paper.append(caption);
-      const canvas = document.createElement("canvas");
-      canvas.className = "page-canvas";
-      canvas.setAttribute("role", "img");
-      canvas.setAttribute("aria-label", `Mushaf, page ${page.page}`);
-      canvas.style.aspectRatio = `${page.width} / ${to - from}`;
-      canvas.dataset.page = page.page;
-      canvas.dataset.pageWordCount = page.words.length;
-      if (learning) canvas.style.cursor = "default";
-      const availableWidth = Math.max(1, host.clientWidth - 4),
-        availableHeight = Math.max(1, host.clientHeight - 26);
-      const width = Math.max(
-        1,
-        Math.min(availableWidth, (availableHeight * page.width) / (to - from)),
-      );
-      paper.style.width = width + "px";
-      const dpr = Math.min(devicePixelRatio || 1, 3),
-        scale = width / page.width;
-      canvas.width = Math.round(width * dpr);
-      canvas.height = Math.round((to - from) * scale * dpr);
-      paper.append(canvas);
-      host.append(paper);
-      const entry = {
-        page,
-        canvas,
-        chosen,
-        from,
-        to,
-        keys: new Set(chosen.map((w) => w.index)),
-        dpr,
-        scale,
-        paths: page.buildPaths(),
-      };
-      config.canvases.push(entry);
-      if (!learning)
-        canvas.addEventListener("click", (e) => {
-          const rect = canvas.getBoundingClientRect(),
-            x = ((e.clientX - rect.left) * page.width) / rect.width,
-            y = ((e.clientY - rect.top) * (to - from)) / rect.height + from;
-          const word = chosen.find((w) => {
-            const b = wordBand(page, w);
-            return (
-              x >= b.x - 2 &&
-              x <= b.x + b.width + 2 &&
-              y >= b.y &&
-              y <= b.y + b.height
-            );
-          });
-          if (word) onVerse(`${word.surah}:${word.ayah}`);
-        });
-    }
-    redraw();
-  } catch (e) {
-    if (token === revision) {
-      host.innerHTML =
-        '<p class="error">La page du mushaf n’a pas pu se charger.</p><button type="button" class="btn secondary" data-mushaf-retry>Réessayer</button>';
-      host
-        .querySelector("[data-mushaf-retry]")
-        .addEventListener("click", () => {
-          void mountMushaf({ ...config, pageNumbers });
-        });
-    }
-    console.error(e);
-  }
+export async function mountMushaf({units,hidden=false,fullPage=false,pageNumbers,onVerse,statuses=[],revealedAyahs=[],revealRecognized=false,learning=null,playing=null,playingWord=null,initialPage=null,scrollTop=null,onPage=null}) {
+ const host=document.querySelector('#printed-mushaf');if(!host)return;
+ current?.observer?.disconnect();current?.pageObserver?.disconnect();const token=++revision;
+ const config=current={units,hidden,fullPage,onVerse,statuses,revealedAyahs,revealRecognized,learning,playing,playingWord,canvases:[]};
+ host.classList.add('continuous-mushaf');host.replaceChildren();const stage=host.closest('#reader-stage');
+ const keys=new Set(),ayahs=new Set(units.map(u=>u.id));units.forEach(u=>u.wordRefs?.forEach(w=>keys.add(wordKey(w))));
+ for(const n of pageNumbers){const paper=document.createElement('section');paper.className='printed-page';paper.dataset.page=n;paper.innerHTML=`<div class="printed-caption">Page ${n}</div><div class="page-placeholder">Ouverture de la page…</div>`;host.append(paper);}
+ if(scrollTop!=null)stage.scrollTop=scrollTop;else if(initialPage){const paper=host.querySelector(`[data-page="${initialPage}"]`);if(paper)stage.scrollTop=paper.offsetTop-host.offsetTop;}
+ const mountPage=async paper=>{if(paper.dataset.loading||paper.querySelector('canvas'))return;paper.dataset.loading='true';try{const page=await getPage(Number(paper.dataset.page));if(token!==revision||!paper.isConnected)return;
+ const chosen=learning?page.words:page.words.filter(w=>keys.has(`${w.surah}:${w.ayah}:${w.word}`)||(!keys.size&&ayahs.has(`${w.surah}:${w.ayah}`)));
+ const from=0,to=page.height,canvas=document.createElement('canvas');canvas.className='page-canvas';canvas.setAttribute('role','img');canvas.setAttribute('aria-label',`Mushaf, page ${page.page}`);canvas.dataset.page=page.page;canvas.dataset.pageWordCount=page.words.length;canvas.style.aspectRatio=`${page.width} / ${page.height}`;
+ const width=Math.max(1,host.clientWidth-4),dpr=Math.min(devicePixelRatio||1,2),scale=width/page.width;canvas.width=Math.round(width*dpr);canvas.height=Math.round(page.height*scale*dpr);paper.querySelector('.page-placeholder')?.remove();paper.append(canvas);
+ const allowedSurahs=new Set(units.flatMap(u=>(u.wordRefs||[]).map(w=>w.s))),allowedAyahs=new Set(units.flatMap(u=>(u.wordRefs||[]).map(w=>`${w.s}:${w.a}`))),excludedDecorations=new Set();for(const d of page.decorations)if(d.surah&&(!allowedSurahs.has(d.surah)||(d.ayah&&!allowedAyahs.has(`${d.surah}:${d.ayah}`))))for(let i=d.firstPath;i<d.firstPath+d.nPaths;i++)excludedDecorations.add(i);
+ const entry={page,canvas,chosen,from,to,excludedDecorations,keys:new Set(chosen.map(w=>w.index)),dpr,scale,paths:page.buildPaths()};config.canvases.push(entry);
+ if(!learning)canvas.addEventListener('click',e=>{const rect=canvas.getBoundingClientRect(),x=(e.clientX-rect.left)*page.width/rect.width,y=(e.clientY-rect.top)*page.height/rect.height;const w=chosen.find(w=>{const b=wordBand(page,w);return x>=b.x-2&&x<=b.x+b.width+2&&y>=b.y&&y<=b.y+b.height;});if(w)onVerse(`${w.surah}:${w.ayah}`);});redraw();
+ }catch(e){if(token===revision&&paper.isConnected){paper.querySelector('.page-placeholder').innerHTML='<button type="button" class="btn secondary">Réessayer</button>';paper.querySelector('button').onclick=()=>{delete paper.dataset.loading;void mountPage(paper);};console.error(e);}}finally{delete paper.dataset.loading;}};
+ const observer=new IntersectionObserver(entries=>{for(const entry of entries){const paper=entry.target;if(entry.isIntersecting)void mountPage(paper);else{const canvas=paper.querySelector('canvas');if(canvas){config.canvases=config.canvases.filter(e=>e.canvas!==canvas);canvas.remove();paper.insertAdjacentHTML('beforeend','<div class="page-placeholder">Ouverture de la page…</div>');}}}},{root:stage,rootMargin:'650px 0px'});config.observer=observer;
+ const pageObserver=new IntersectionObserver(entries=>{const visible=entries.filter(e=>e.isIntersecting).sort((a,b)=>b.intersectionRatio-a.intersectionRatio);if(visible.length&&token===revision)onPage?.(Number(visible[0].target.dataset.page));},{root:stage,threshold:[.25,.5,.75]});config.pageObserver=pageObserver;
+ host.querySelectorAll('.printed-page').forEach(p=>{observer.observe(p);pageObserver.observe(p);});
 }
+
 function redraw() {
   if (!current) return;
   const states = new Map();
@@ -269,6 +167,7 @@ function redraw() {
                 ? "#2857b6"
                 : "#17253b";
       } else {
+        if(entry.excludedDecorations?.has(p))continue;
         if (!current.fullPage && !lines.has(page.pathLine(p))) continue;
         c.fillStyle = "#7c7357";
       }

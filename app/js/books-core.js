@@ -18,8 +18,8 @@ export const emptyStudy = () => ({
   programs: [],
   cards: {},
   logs: [],
-  retention: 0.95,
-  schedulingProfile: "closer-v1",
+  retention: 0.9,
+  schedulingProfile: "standard-90-v2",
 });
 const dayKey = (date) => {
   const d = new Date(date);
@@ -134,7 +134,7 @@ export function previewGrades(study, editionId, questionId, now = new Date()) {
       ...(existing ? revive(existing) : createEmptyCard(now)),
       card_id: key,
     };
-  const retention = Number(study.retention) || 0.95;
+  const retention = Number(study.retention) || 0.9;
   if (retention < 0.7 || retention > 0.99)
     throw Error("Rétention souhaitée invalide.");
   const engine = fsrs(
@@ -259,17 +259,17 @@ export function undoBookGrade(study) {
   return { ...study, cards, logs: study.logs.slice(0, -1), undo: null };
 }
 
-// Keep review history/due dates intact; the closer preset applies to future grades.
+// Restore 90% for the former default; preserve due dates, history and custom retention.
 export function migrateCloserReviews(study) {
-  if (study.schedulingProfile === "closer-v1") return study;
+  if (study.schedulingProfile === "standard-90-v2") return study;
   return {
     ...study,
-    schedulingProfile: "closer-v1",
+    schedulingProfile: "standard-90-v2",
     retention:
-      !study.retention || study.retention === 0.9 ? 0.95 : study.retention,
+      !study.retention || study.retention === 0.95 ? 0.9 : study.retention,
     programs: study.programs.map((p) => ({
       ...p,
-      retention: !p.retention || p.retention === 0.9 ? 0.95 : p.retention,
+      retention: !p.retention || p.retention === 0.95 ? 0.9 : p.retention,
     })),
   };
 }

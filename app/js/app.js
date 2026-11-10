@@ -112,6 +112,7 @@ import { wordHidden } from "./word-display.js";
 import { Recognition } from "./recognition.js";
 import { nextReadingWord } from "./reading-position.js";
 import * as audio from "./audio.js";
+let freeReadingSaveTimer;
 let retryFrontierKey = null;
 const mistakes = new StableMistakes(),
   retryMistakes = new StableMistakes(),
@@ -461,7 +462,7 @@ function render() {
         pageNumbers: session ? sheets.map(s=>s.page) : Array.from({length:604},(_,i)=>i+1),
         initialPage: sheet.page,
         scrollTop: Number(mushafPage)===sheet.page ? mushafTop : null,
-        onPage: (page)=>{const host=root.querySelector("#printed-mushaf");if(host)host.dataset.currentPage=page;if(session){const index=sheets.findIndex(s=>s.page===page);if(index>=0)reader.sheet=index;}else{if(!recognition.active){reader.page=page;const unit=pageUnits.find(u=>u.page===page);if(unit?.wordRefs[0])reader.sid=String(unit.wordRefs[0].s);}const title=root.querySelector(".reader-head h1"),subtitle=root.querySelector(".reader-head .small");if(title)title.textContent=section("quran",reader.sid).name;if(subtitle)subtitle.textContent=`Page ${page} · lecture libre`;const position=root.querySelector(".quran-page-position");if(position)position.textContent=`${page} / 604`;}},
+        onPage: (page)=>{const host=root.querySelector("#printed-mushaf");if(host)host.dataset.currentPage=page;if(session){const index=sheets.findIndex(s=>s.page===page);if(index>=0)reader.sheet=index;}else{if(!recognition.active){reader.page=page;const unit=pageUnits.find(u=>u.page===page);if(unit?.wordRefs[0])reader.sid=String(unit.wordRefs[0].s);if(db.freeReading?.page!==page){db.freeReading=readingPlace(reader,"quran");clearTimeout(freeReadingSaveTimer);freeReadingSaveTimer=setTimeout(stateSave,200);}}const title=root.querySelector(".reader-head h1"),subtitle=root.querySelector(".reader-head .small");if(title)title.textContent=section("quran",reader.sid).name;if(subtitle)subtitle.textContent=`Page ${page} · lecture libre`;const position=root.querySelector(".quran-page-position");if(position)position.textContent=`${page} / 604`;}},
         statuses: statusesFor(session ? currentUnits() : corpora.quran.sections.flatMap(s=>s.units)),
         revealedAyahs: reader.revealedAyahs || [],
         onVerse: (id) => {

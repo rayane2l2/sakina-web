@@ -25,9 +25,7 @@ export function verseTokens(unit, canonical = unit) {
     .map((text) => ({ text, position: spoken(text) ? ++position : null }));
 }
 export function pageVerseUnits(sections, page) {
-  return sections
-    .flatMap((s) => s.units)
-    .filter((u) => (u.pages || [u.page]).includes(page));
+  return verseIndex(sections).byPage.get(page) || [];
 }
 export function spokenVerseUnit(unit) {
   const [s, a] = unit.id.split(":").map(Number),
@@ -40,43 +38,130 @@ export function spokenVerseUnit(unit) {
     wordRefs: words.map((w) => ({ s, a, w: w.position, text: w.text })),
   };
 }
-export function verseReadingHTML(
-  {
-    units,
-    sections,
-    resolve,
-    size = 40,
-    pageNavigation = null,
-    wordPlaying = null,
-    showHint = true,
-    tajweed = null,
-  },
-  escape,
-) {
-  const e = escape;
-  return `<div class="quran-verse-scroll quran-book-reading" tabindex="0" aria-label="Lecture du Coran en arabe et en phonétique" style="--quran-text-size:${quranTextSize(size)}px">${tajweed ? tajweedLegend(e) : ""}${phoneticLegend()}${showHint ? '<p class="quran-verse-help">Touche un mot pour l’écouter. ▶ lit le verset.</p>' : ""}<div class="quran-book-sheet">${units
-    .map((u) => {
-      const [sid, n] = u.id.split(":"),
-        section = sections.find((s) => String(s.id) === sid),
-        name = section?.name || sid;
-      const chapterHeading = n === "1" && (!u.wordRefs?.length || u.wordRefs[0].w === 1)
-        ? `<div class="quran-book-title"><strong>Sourate ${e(name)}</strong>${section?.ar ? `<span lang="ar" dir="rtl">${e(section.ar)}</span>` : ""}</div>${sid === "1" || sid === "9" ? "" : `<div class="quran-book-basmala"><span lang="ar" dir="rtl">بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ</span>${versePhoneticHTML({id: "1:1"})}</div>`}`
-        : "";
-      return `${chapterHeading}<article class="quran-verse-block" data-verse-key="${e(u.id)}"><button type="button" class="verse-listen" data-action="listen-reading-verse" data-id="${e(u.id)}" aria-label="Écouter le verset ${e(n)} de ${e(name)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></button><p dir="rtl" lang="ar">${verseTokens(
-        u,
-        resolve(u.id),
-      )
-        .map((w) =>
-          w.position
-            ? `<button type="button" class="quran-word ${wordPlaying === u.id + ":" + w.position ? "is-speaking" : ""}" data-action="listen-word" data-id="${e(u.id)}" data-position="${w.position}" data-coordinate="${u !== resolve(u.id) && u.wordRefs?.length ? "printed" : "canonical"}" aria-label="Écouter le mot ${e(w.text)}">${tajweedWord(w.text, u.id, w.position, u !== resolve(u.id) && u.wordRefs?.length ? "printed" : "canonical", tajweed, e)}</button>`
-            : `<span class="quran-pause">${e(w.text)}</span>`,
-        )
-        .join(" ")} <span class="quran-book-marker" aria-label="Verset ${e(n)}">${e(n)}</span></p>${versePhoneticHTML(u)}</article>`;
-    })
-    .join(
-      "",
-    )}</div>${pageNavigation ? `<div class="verse-page-navigation"><button class="btn secondary" data-action="previous" ${pageNavigation.first ? "disabled" : ""}>Page précédente</button><button class="btn secondary" data-action="next" ${pageNavigation.last ? "disabled" : ""}>Page suivante</button></div>` : ""}</div>`;
+export function verseRowsHTML({ units, sections, resolve, wordPlaying, printedPlaying, tajweed }, e) {
+  return units.map((u) => {
+  const [sid, n] = u.id.split(":"),
+    section = sections.find((s) => String(s.id) === sid),
+    name = section?.name || sid;
+  const printed = Boolean(u !== resolve(u.id) && u.wordRefs?.length);
+  const chapterHeading = n === "1" && (!u.wordRefs?.length || u.wordRefs[0].w === 1)
+    ? `<div data-book-heading-for="${e(u.id)}"><div class="quran-book-title"><strong>Sourate ${e(name)}</strong>${section?.ar ? `<span lang="ar" dir="rtl">${e(section.ar)}</span>` : ""}</div>${sid === "1" || sid === "9" ? "" : `<div class="quran-book-basmala"><span lang="ar" dir="rtl">بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ</span>${versePhoneticHTML({id: "1:1"})}</div>`}</div>`
+    : "";
+  return `${chapterHeading}<article class="quran-verse-block" data-verse-key="${e(u.id)}"><button type="button" class="verse-listen" data-action="listen-reading-verse" data-id="${e(u.id)}" aria-label="Écouter le verset ${e(n)} de ${e(name)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></button><p dir="rtl" lang="ar">${verseTokens(
+    u,
+    resolve(u.id),
+  )
+    .map((w) =>
+      w.position
+        ? `<button type="button" class="quran-word ${(printed ? printedPlaying : wordPlaying) === u.id + ":" + w.position ? "is-speaking" : ""}" data-action="listen-word" data-id="${e(u.id)}" data-position="${w.position}" data-coordinate="${printed ? "printed" : "canonical"}" aria-label="Écouter le mot ${e(w.text)}">${tajweedWord(w.text, u.id, w.position, printed ? "printed" : "canonical", tajweed, e)}</button>`
+        : `<span class="quran-pause">${e(w.text)}</span>`,
+    )
+    .join(" ")} <span class="quran-book-marker" aria-label="Verset ${e(n)}">${e(n)}</span></p>${versePhoneticHTML(u, { playing: printedPlaying })}</article>`;
+  }).join('');
 }
+
+export function verseReadingHTML(config, escape) {
+  const { size = 40, showHint = true, tajweed } = config;
+  return `<div class="quran-verse-scroll quran-book-reading" tabindex="0" aria-label="Lecture du Coran en arabe et en phonétique" style="--quran-text-size:${quranTextSize(size)}px"><div class="quran-book-tools">${tajweed ? tajweedLegend(escape) : ''}${phoneticLegend()}${showHint ? '<p class="quran-verse-help">Touche un mot pour l’écouter. ▶ lit le verset.</p>' : ''}</div><div class="quran-book-sheet">${verseRowsHTML(config, escape)}</div></div>`;
+}
+
+const bookChunkSize = 24;
+const verseIndexes = new WeakMap();
+
+function verseIndex(sections) {
+  let index = verseIndexes.get(sections);
+  if (index) return index;
+  const units = sections.flatMap((section) => section.units);
+  const byId = new Map(units.map((unit, i) => [unit.id, i]));
+  const byPage = new Map();
+  for (const unit of units) {
+    for (const page of new Set(unit.pages || [unit.page])) {
+      if (!byPage.has(page)) byPage.set(page, []);
+      byPage.get(page).push(unit);
+    }
+  }
+  index = { units, byId, byPage };
+  verseIndexes.set(sections, index);
+  return index;
+}
+
+function visibleBookRow(sheet, top) {
+  const children = sheet.children;
+  let lo = 0, hi = children.length;
+  while (lo < hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (children[mid].getBoundingClientRect().bottom <= top) lo = mid + 1;
+    else hi = mid;
+  }
+  return children[Math.min(lo, children.length - 1)];
+}
+
+export function verseBookViewportTop(scroller) {
+  return scroller.querySelector('.quran-book-tools')?.getBoundingClientRect().bottom ?? scroller.getBoundingClientRect().top;
+}
+
+export function verseBookPosition(scroller) {
+  const sheet = scroller?.querySelector('.quran-book-sheet');
+  if (!sheet?.children.length) return null;
+  const top = verseBookViewportTop(scroller);
+  const row = visibleBookRow(sheet, top + 1);
+  return {
+    id: row.dataset.verseKey || row.dataset.bookHeadingFor,
+    heading: Boolean(row.dataset.bookHeadingFor),
+    offset: row.getBoundingClientRect().top - top,
+    top: scroller.scrollTop,
+  };
+}
+
+export function mountVerseBook(scroller, config, escape) {
+  const { sections, anchorId, page, restore, onVerse } = config;
+  const { units, byId, byPage } = verseIndex(sections);
+  const sheet = scroller.querySelector('.quran-book-sheet');
+  const wanted = byId.get(anchorId);
+  const at = wanted !== undefined && (units[wanted].pages || [units[wanted].page]).includes(page)
+    ? wanted
+    : byId.get(byPage.get(page)?.[0]?.id) ?? 0;
+  let start = Math.max(0, at - bookChunkSize);
+  let end = Math.min(units.length, at + bookChunkSize);
+  const renderRows = (from, to) => verseRowsHTML({
+    ...config,
+    ...config.playback?.(),
+    units: units.slice(from, to),
+  }, escape);
+  sheet.innerHTML = renderRows(start, end);
+  const restored = restore?.id === units[at].id ? restore : null;
+  const id = CSS.escape(units[at].id);
+  const target = (restored?.heading !== false && sheet.querySelector(`[data-book-heading-for="${id}"]`))
+    || sheet.querySelector(`[data-verse-key="${id}"]`);
+  if (restored?.top === 0 && start === 0) scroller.scrollTop = 0;
+  else if (target && (at > 0 || restored))
+    scroller.scrollTop += target.getBoundingClientRect().top - verseBookViewportTop(scroller) - (restored?.offset ?? 8);
+
+  let frame = 0;
+  scroller.addEventListener('scroll', () => {
+    if (frame) return;
+    frame = requestAnimationFrame(() => {
+      frame = 0;
+      if (!scroller.isConnected) return;
+      const position = verseBookPosition(scroller);
+      if (position) onVerse?.(units[byId.get(position.id)]);
+      if (scroller.scrollTop < 350 && start > 0) {
+        const first = sheet.firstElementChild;
+        const before = first.getBoundingClientRect().top;
+        const next = Math.max(0, start - bookChunkSize);
+        sheet.insertAdjacentHTML('afterbegin', renderRows(next, start));
+        scroller.scrollTop += first.getBoundingClientRect().top - before;
+        start = next;
+      }
+      if (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 500 && end < units.length) {
+        const next = Math.min(units.length, end + bookChunkSize);
+        sheet.insertAdjacentHTML('beforeend', renderRows(end, next));
+        end = next;
+      }
+    });
+  }, { passive: true });
+}
+
 export class QuranWordAudio {
   constructor(fetcher = (...args) => fetch(...args)) {
     this.fetcher = fetcher;

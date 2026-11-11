@@ -46,32 +46,35 @@ function bookWord(word, next = '') {
 
 // Full lines checked against the supplied photos of pages 13 and 14.
 const photographed = {
-  '1:1': 'Bismi l-Lâhi r-Ra' + underline('h') + 'mâni r-Ra' + underline('h') + 'îm',
-  '80:1': 'عabaça wa tawal-lâ',
-  '80:2': 'a*djâ’ahoul’aعmâ',
-  '80:3': 'wa mâ youdrîka laعal-lahoû yaz-zak-kâ',
-  '80:4': 'aw yadh-dhak-karou fata*faعahoudh-dhikrâ',
-  '80:5': 'am*mâ manistaghnâ',
-  '80:6': 'fa a*ta lahoû ta' + underline('ç') + 'ad-dâ',
-  '80:7': 'wa mâ عalayka al-lâ yaz-zak-kâ',
-  '80:8': 'wa am*mâ ma*djâ’aka yasعâ',
-  '80:9': 'wa houwa yakhchâ',
-  '80:10': 'fa a*ta عanhou talah-hâ',
-  '80:11': 'kal-lâ in*nahâ tadhkirah',
-  '80:12': 'fama*châ’a dhakarah',
-  '80:13': 'fî ' + underline('s') + 'ou' + underline('h') + 'oufim*moukar-ramah',
-  '80:14': 'marfoûعatim*mou' + underline('t') + 'ah-harah',
-  '80:15': 'bi’aydî safarah',
-  '80:16': 'kirâmim*bararah',
-  '80:17': 'qoutilal-i*sânou mâ akfarah',
+  '1:1': 'Bismi| l-Lâhi| r-Ra' + underline('h') + 'mâni| r-Ra' + underline('h') + 'îm',
+  '80:1': 'عabaça| wa tawal-lâ',
+  '80:2': 'a*|djâ’ahou|l’aعmâ',
+  '80:3': 'wa mâ| youdrîka| laعal-lahoû| yaz-zak-kâ',
+  '80:4': 'aw| yadh-dhak-karou| fata*faعahou|dh-dhikrâ',
+  '80:5': 'am*mâ| mani|staghnâ',
+  '80:6': 'fa a*ta| lahoû| ta' + underline('ç') + 'ad-dâ',
+  '80:7': 'wa mâ| عalayka| al-lâ| yaz-zak-kâ',
+  '80:8': 'wa am*mâ| ma*|djâ’aka| yasعâ',
+  '80:9': 'wa houwa| yakhchâ',
+  '80:10': 'fa a*ta| عanhou| talah-hâ',
+  '80:11': 'kal-lâ| in*nahâ| tadhkirah',
+  '80:12': 'fama*|châ’a| dhakarah',
+  '80:13': 'fî| ' + underline('s') + 'ou' + underline('h') + 'oufi|m*moukar-ramah',
+  '80:14': 'marfoûعati|m*mou' + underline('t') + 'ah-harah',
+  '80:15': 'bi’aydî| safarah',
+  '80:16': 'kirâmim*|bararah',
+  '80:17': 'qoutila|l-i*sânou| mâ| akfarah',
 };
 
 export function bookPhoneticRecord(id, phonemeWords) {
   const words = phonemeWords.map((word, index) => bookWord(word, phonemeWords[index + 1])
     .replace(/l-lâh/g, 'l-Lâh'));
+  const source = photographed[id]?.split('|');
+  if (source && source.length !== words.length) throw Error('Photographed word alignment: ' + id);
   return {
     words,
-    text: photographed[id] || words.join(' ').replace(/\* /g, '*'),
-    reviewStatus: photographed[id] ? 'source' : 'generated',
+    text: source?.join('') ?? words.join(' ').replace(/\* /g, '*'),
+    ...(source ? { displayWords: source } : {}),
+    reviewStatus: source ? 'source' : 'generated',
   };
 }

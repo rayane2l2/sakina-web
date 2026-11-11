@@ -14,6 +14,9 @@ import {
   verseTokens,
   spokenVerseUnit,
   verseReadingHTML,
+  verseBookPosition,
+  verseBookViewportTop,
+  mountVerseBook,
   QuranWordAudio,
 } from "./quran-reading.js";
 import { matnSequence, fullMatnAudio, matnLyrics, matnLibraryHTML } from "./matn-reading.js";
@@ -347,11 +350,15 @@ let layoutObserver;
 function render() {
   const previousMatnScroll=root.querySelector(".matn-library-scroll");if(previousMatnScroll&&!session)reader.matnScroll=previousMatnScroll.scrollTop;
   const previousMushaf=root.querySelector("#printed-mushaf"),mushafTop=previousMushaf?.parentElement.scrollTop,mushafPage=previousMushaf?.dataset.currentPage;
-  const verseScroll=root.querySelector('.quran-verse-scroll'),verseTop=verseScroll?.scrollTop||0,verseKey=verseScroll?.querySelector('[data-verse-key]')?.dataset.verseKey;
-  const tajweedOpen=[...root.querySelectorAll('details.tajweed-legend, .tajweed-legend details')].map(el=>el.open);
+  const verseScroll = root.querySelector('.quran-verse-scroll');
+  const oldBookPosition = verseBookPosition(verseScroll);
+  const verseTop = verseScroll?.scrollTop || 0;
+  const verseKey = verseScroll?.querySelector('[data-verse-key]')?.dataset.verseKey;
+  const legends = 'details.tajweed-legend, .tajweed-legend details, details.phonetic-legend';
+  const legendOpen = [...root.querySelectorAll(legends)].map(el => el.open);
   const formScroll = [
     ...root.querySelectorAll(
-      ".selection-choices,.qa-choice-list,.quran-verse-scroll",
+      ".selection-choices,.qa-choice-list",
     ),
   ].map((el) => ({ selector: "." + el.classList[0], top: el.scrollTop }));
   if (view !== lastScreen) {
@@ -396,8 +403,22 @@ function render() {
   );
   layoutObserver?.disconnect();
   root.innerHTML = `<div class="shell ${view === "reader" ? "reading" : bookStudy ? "book-study" : ""}">${view !== "reader" && !bookStudy ? masthead() : ""}${view === "home" ? home() : view === "library" ? library() : view === "programs" ? programs() : view === "new" ? newProgram() : view === "books" ? books.render() : view === "reader" ? readerView() : settings()}</div>${view !== "reader" && !bookStudy ? nav() : ""}`;
-  root.querySelectorAll('details.tajweed-legend, .tajweed-legend details').forEach((el,i)=>{el.open=Boolean(tajweedOpen[i]);});
-  const nextVerseScroll=root.querySelector('.quran-verse-scroll');if(verseKey&&nextVerseScroll?.querySelector('[data-verse-key]')?.dataset.verseKey===verseKey)nextVerseScroll.scrollTop=verseTop;
+  root.querySelectorAll(legends).forEach((el, i) => { el.open = Boolean(legendOpen[i]); });
+  const nextVerseScroll = root.querySelector('.quran-verse-scroll');
+  if (nextVerseScroll && !session) {
+    mountVerseBook(nextVerseScroll, {
+      sections: corpora.quran.sections,
+      resolve: (id) => findUnit('quran', id),
+      anchorId: reader.anchorId,
+      page: reader.page,
+      restore: oldBookPosition,
+      tajweed: tajweedData,
+      playback: () => ({ wordPlaying: playingWord, printedPlaying: playingPrintedWord }),
+      onVerse: updateBookReadingPlace,
+    }, esc);
+  } else if (verseKey && nextVerseScroll?.querySelector('[data-verse-key]')?.dataset.verseKey === verseKey) {
+    nextVerseScroll.scrollTop = verseTop;
+  }
   formScroll.forEach(({ selector, top }) => {
     const el = root.querySelector(selector);
     if (el) el.scrollTop = top;
@@ -522,6 +543,24 @@ function verseMode() {
     currentCorpus() === "quran" &&
     quranReadingMode(db.settings.quranReadingMode) === "verses"
   );
+}
+function updateBookReadingPlace(unit) {
+  if (!unit || session || recognition.active) return;
+  if (reader.anchorId === unit.id) return;
+  const [sid, n] = unit.id.split(':');
+  reader.sid = sid;
+  reader.index = Number(n) - 1;
+  reader.anchorId = unit.id;
+  if (!(unit.pages || [unit.page]).includes(reader.page)) reader.page = unit.page;
+  db.freeReading = readingPlace(reader, 'quran');
+  clearTimeout(freeReadingSaveTimer);
+  freeReadingSaveTimer = setTimeout(stateSave, 200);
+  const title = root.querySelector('.reader-head h1');
+  const subtitle = root.querySelector('.reader-head .small');
+  const position = root.querySelector('.quran-page-position');
+  if (title) title.textContent = section('quran', sid).name;
+  if (subtitle) subtitle.textContent = `Page ${reader.page} · lecture libre`;
+  if (position) position.textContent = `${reader.page} / 604`;
 }
 function isHidden() {
   if (verseMode()) return false;
@@ -886,18 +925,14 @@ function readerView() {
         corpus === "quran" && verseMode()
           ? verseReadingHTML(
               {
-                units: session
-                  ? units
-                  : pageVerseUnits(corpora.quran.sections, reader.page),
+                units: session ? units : [],
                 sections: corpora.quran.sections,
                 resolve: (id) => findUnit("quran", id),
                 size: db.settings.quranTextSize,
                 wordPlaying: playingWord,
+                printedPlaying: playingPrintedWord,
                 showHint: !db.settings.wordHintSeen,
                 tajweed: tajweedData,
-                pageNavigation: session
-                  ? null
-                  : { first: reader.page <= 1, last: reader.page >= 604 },
               },
               esc,
             )
@@ -1124,7 +1159,7 @@ function settings() {
           })
           .join("")
       : '<p class="muted">Une étoile dans la lecture, et tu retrouves ton passage ici.</p>'
-  }</section><details class="card"><summary>À propos du suivi vocal</summary><p class="small muted">Sakina.me · version 1.26.1</p><p>Zipformer Quran v3.1 · Quran Lab, via ReciteQuran et le moteur local sherpa-onnx. Reconnaissance des phonèmes en Hafs. Retours expérimentaux, sans validation automatique du tajwid.</p><p>Application personnelle et gratuite. Aucune publicité, aucun compte, aucun envoi d’audio.</p><a href="vendor/LICENSE-ReciteQuran.txt">Conditions ReciteQuran</a> · <a href="THIRD_PARTY_NOTICES.txt">Sources et licences</a></details>`;
+  }</section><details class="card"><summary>À propos du suivi vocal</summary><p class="small muted">Sakina.me · version 1.26.2</p><p>Zipformer Quran v3.1 · Quran Lab, via ReciteQuran et le moteur local sherpa-onnx. Reconnaissance des phonèmes en Hafs. Retours expérimentaux, sans validation automatique du tajwid.</p><p>Application personnelle et gratuite. Aucune publicité, aucun compte, aucun envoi d’audio.</p><a href="vendor/LICENSE-ReciteQuran.txt">Conditions ReciteQuran</a> · <a href="THIRD_PARTY_NOTICES.txt">Sources et licences</a></details>`;
 }
 async function resetVoice() {
   errorStreak.reset();
@@ -1636,9 +1671,9 @@ async function listen(units = currentUnits(), extra = false, options = {}) {
           if (scroller && card) {
             const bounds = scroller.getBoundingClientRect(),
               rect = card.getBoundingClientRect();
-            if (rect.top < bounds.top || rect.bottom > bounds.bottom)
+            if (rect.top < verseBookViewportTop(scroller) || rect.bottom > bounds.bottom)
               scroller.scrollTo({
-                top: scroller.scrollTop + rect.top - bounds.top - 8,
+                top: scroller.scrollTop + rect.top - verseBookViewportTop(scroller) - 8,
                 behavior: matchMedia("(prefers-reduced-motion: reduce)").matches
                   ? "instant"
                   : "smooth",
@@ -1864,10 +1899,6 @@ async function action(el) {
   if (a === "listen-reading-verse") {
     const unit = findUnit("quran", el.dataset.id);
     if (!unit) return;
-    if (!session) {
-      reader.anchorId = unit.id;
-      reader.sid = unit.id.split(":")[0];
-    }
     await listen([unit], false, { repeats: 1, readingOnly: true });
     return;
   }
@@ -2469,7 +2500,7 @@ async function offlineStore() {
       return createOfflineStore({
         manifest: await response.json(),
         baseURL: location.href,
-        shellCache: "sakina-recite-v37",
+        shellCache: "sakina-recite-v38",
       });
     })().catch((error) => {
       offlineStorePromise = null;

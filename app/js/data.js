@@ -140,7 +140,7 @@ export const section = (corpus, id) =>
   );
 export const findUnit = (corpus, id) => indexes[corpus].get(id);
 export const sectionLabel = (corpus, s) =>
-  corpus === "quran"
+  corpus === "quran" || corpora[corpus].unit === "hadith"
     ? s.name
     : `${s.name} · ${corpora[corpus].unit}${corpora[corpus].unit === "passage" ? "s" : ""} ${s.first}–${s.last}`;
 export function pageSizes(units) {

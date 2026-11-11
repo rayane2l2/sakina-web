@@ -12,3 +12,15 @@ export function versePartsHTML(parts, escape, phonetic = false) {
     `<span class="bayt-half" lang="${lang}" dir="${dir}">${matnTextHTML(part, escape, phonetic)}</span>`,
   ).join('')}</span>`;
 }
+
+export function matnUnitTextHTML(unit, escape, includeTitle = false) {
+  const render = (text) => matnTextHTML(text, escape, unit.phonetic);
+  const body = unit.parts?.length === 2
+    ? versePartsHTML(unit.parts, escape, unit.phonetic)
+    : render(unit.text);
+  const title = includeTitle && unit.titleAr
+    ? `<strong class="matn-unit-title">${render(unit.titleAr)}</strong>` : '';
+  const attribution = unit.attribution
+    ? `<span class="matn-attribution">${render(unit.attribution)}</span>` : '';
+  return title + body + attribution;
+}

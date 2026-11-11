@@ -1,5 +1,5 @@
 import {boundedQuranPlan,completeQuranRotation,registerLongCompletion,seedLongSurahs,completionReview,QURAN_PLAN_VERSION} from './quran-plan.js';
-import {matnTextHTML, versePartsHTML} from './matn-format.js';
+import {matnTextHTML, matnUnitTextHTML, versePartsHTML} from './matn-format.js';
 import {phoneticCorpus,phoneticUnit,unitPhonetic} from './transliteration.js';
 import {createProgramWizard} from './program-wizard.js';
 import { createOfflineStore } from "./offline-cache.js";
@@ -756,7 +756,7 @@ function sectionRows(c, empty = false) {
       )
       .map(
         (s) =>
-          `<button class="section-row" data-action="open-section" data-corpus="${c.id}" data-sid="${s.id}"><span class="surah-number">${s.id}</span><span><b>${esc(s.name)}</b><small>${c.id === "quran" ? `${s.units.length} versets · page ${s.units[0].page}` : `${c.unit === "vers" ? "Vers" : "Passages"} ${s.first}–${s.last} · ${s.units.length} ${c.unit}${c.unit === "passage" && s.units.length > 1 ? "s" : ""}`}</small></span><span class="ar section-ar">${esc(s.ar)}</span></button>`,
+          `<button class="section-row" data-action="open-section" data-corpus="${c.id}" data-sid="${s.id}"><span class="surah-number">${s.id}</span><span><b>${esc(s.name)}</b>${c.unit === "hadith" ? "" : `<small>${c.id === "quran" ? `${s.units.length} versets · page ${s.units[0].page}` : `${c.unit === "vers" ? "Vers" : "Passages"} ${s.first}–${s.last} · ${s.units.length} ${c.unit}${c.unit === "passage" && s.units.length > 1 ? "s" : ""}`}</small>`}</span><span class="ar section-ar">${esc(s.ar)}</span></button>`,
       )
       .join("") || (empty ? "" : '<p class="muted">Aucun passage trouvé.</p>')
   );
@@ -901,6 +901,9 @@ function displayStatuses() {
 function currentCorpus() {
   return session?.corpus || reader.corpus;
 }
+function unitName(unit) {
+  return unit[0].toUpperCase() + unit.slice(1);
+}
 function readerView() {
   const corpus = currentCorpus(),
     units = currentUnits(),
@@ -938,7 +941,7 @@ function readerView() {
         ? "Tout l’acquis · récitation quotidienne"
         : corpus === "quran"
           ? `Page ${sheet.page} · ${session ? (session.current.kind === "review" ? "révision" : "portion du jour") : "lecture libre"}`
-          : `${corpora[corpus].unit === "vers" ? "Vers" : "Passage"} ${units[0].n}${units.length > 1 ? "–" + units.at(-1).n : ""} · ${s.name}`,
+          : `${unitName(corpora[corpus].unit)} ${units[0].n}${units.length > 1 ? "–" + units.at(-1).n : ""} · ${s.name}`,
       session: Boolean(session),
       mushaf: printedLearning(),
       matnLyrics: !session && corpus !== "quran",
@@ -1006,7 +1009,7 @@ function readerView() {
       position:
         corpus === "quran"
           ? `${reader.page} / 604`
-          : `${corpora[corpus].unit === "vers" ? "Vers" : "Passage"} ${units[0].n} / ${corpora[corpus].sections.at(-1).last}`,
+          : `${unitName(corpora[corpus].unit)} ${units[0].n} / ${corpora[corpus].sections.at(-1).last}`,
     },
     { button, icon, esc },
   );
@@ -1015,16 +1018,17 @@ function learningText(u, hidden) {
   if (matnPhonetic()) u = phoneticUnit(currentCorpus(), u);
   const text = hidden
     ? '<span class="learning-veil" aria-label="Texte caché"></span>'
+    : u.attribution ? matnUnitTextHTML(u, esc, true)
     : u.parts && u.text === u.parts.join(" ")
       ? versePartsHTML(u.parts,esc,u.phonetic)
       : matnTextHTML(u.text,esc,u.phonetic);
   return `<div class="learning-unit"><p>${text}</p></div>`;
 }
 function verseHTML(corpus, u, hidden) {
-  if (matnPhonetic()) {
-    const reading = phoneticUnit(corpus, u);
-    const text = reading.parts.length === 2 ? versePartsHTML(reading.parts, esc, true) : matnTextHTML(reading.text, esc, true);
-    return `<div class="verse ${hidden ? 'matn-hidden' : ''}" data-verse="${esc(u.id)}"><p lang="fr" dir="ltr">${text}</p></div>`;
+  if (matnPhonetic() || u.attribution) {
+    const reading = matnPhonetic() ? phoneticUnit(corpus, u) : u;
+    const text = matnUnitTextHTML(reading, esc, true);
+    return `<div class="verse ${hidden ? 'matn-hidden' : ''}" data-verse="${esc(u.id)}"><p lang="${reading.phonetic ? 'fr' : 'ar'}" dir="${reading.phonetic ? 'ltr' : 'rtl'}">${text}</p></div>`;
   }
   if(corpus!=="quran"&&u.parts?.length===2)return `<div class="verse ${hidden?'matn-hidden':''}" data-verse="${esc(u.id)}"><p>${versePartsHTML(u.parts,esc)}</p></div>`;
   const ref = phonetics[u.id],
@@ -1159,7 +1163,7 @@ function settings() {
           })
           .join("")
       : '<p class="muted">Une étoile dans la lecture, et tu retrouves ton passage ici.</p>'
-  }</section><details class="card"><summary>À propos du suivi vocal</summary><p class="small muted">Sakina.me · version 1.26.3</p><p>Zipformer Quran v3.1 · Quran Lab, via ReciteQuran et le moteur local sherpa-onnx. Reconnaissance des phonèmes en Hafs. Retours expérimentaux, sans validation automatique du tajwid.</p><p>Application personnelle et gratuite. Aucune publicité, aucun compte, aucun envoi d’audio.</p><a href="vendor/LICENSE-ReciteQuran.txt">Conditions ReciteQuran</a> · <a href="THIRD_PARTY_NOTICES.txt">Sources et licences</a></details>`;
+  }</section><details class="card"><summary>À propos du suivi vocal</summary><p class="small muted">Sakina.me · version 1.27</p><p>Zipformer Quran v3.1 · Quran Lab, via ReciteQuran et le moteur local sherpa-onnx. Reconnaissance des phonèmes en Hafs. Retours expérimentaux, sans validation automatique du tajwid.</p><p>Application personnelle et gratuite. Aucune publicité, aucun compte, aucun envoi d’audio.</p><a href="vendor/LICENSE-ReciteQuran.txt">Conditions ReciteQuran</a> · <a href="THIRD_PARTY_NOTICES.txt">Sources et licences</a></details>`;
 }
 async function resetVoice() {
   errorStreak.reset();
@@ -1512,7 +1516,7 @@ async function startProgram(id) {
     const first = byId[step.ids[0]].n,
       last = byId[step.ids.at(-1)].n,
       label = {
-        single: `${p.corpus === "quran" ? "Verset" : corpora[p.corpus].unit === "vers" ? "Vers" : "Passage"} ${first}`,
+        single: `${unitName(corpora[p.corpus].unit)} ${first}`,
         group: `Ensemble · ${first}–${last}`,
         link: `Relier · ${first}–${last}`,
         test: "Toute la portion de mémoire",
@@ -2506,7 +2510,7 @@ async function offlineStore() {
       return createOfflineStore({
         manifest: await response.json(),
         baseURL: location.href,
-        shellCache: "sakina-recite-v39",
+        shellCache: "sakina-recite-v40",
       });
     })().catch((error) => {
       offlineStorePromise = null;

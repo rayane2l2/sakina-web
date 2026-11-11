@@ -1,4 +1,4 @@
-import {matnTextHTML,versePartsHTML} from './matn-format.js';
+import {matnUnitTextHTML} from './matn-format.js';
 export function matnSequence(corpus) {
   return corpus.sections.flatMap((ch) =>
     ch.units.map((unit, index) => ({
@@ -27,14 +27,12 @@ export function matnLyrics(
   const neighbor = (entry, side) =>
     !entry || masked(entry.unit)
       ? `<div class="matn-lyric-neighbor ${side}" aria-hidden="true"></div>`
-      : `<button type="button" class="matn-lyric-neighbor ${side}" data-action="matn-focus" data-id="${escape(entry.unit.id)}" data-corpus="${escape(corpus.id)}" aria-label="Lire le passage ${side === "before" ? "précédent" : "suivant"}"><span dir="${phonetic?'ltr':'rtl'}" lang="${phonetic?'fr':'ar'}">${entry.unit.parts?.length===2?versePartsHTML(entry.unit.parts,escape,phonetic):matnTextHTML(entry.unit.text,escape,phonetic)}</span></button>`;
+      : `<button type="button" class="matn-lyric-neighbor ${side}" data-action="matn-focus" data-id="${escape(entry.unit.id)}" data-corpus="${escape(corpus.id)}" aria-label="Lire le passage ${side === "before" ? "précédent" : "suivant"}"><span dir="${phonetic?'ltr':'rtl'}" lang="${phonetic?'fr':'ar'}">${matnUnitTextHTML(entry.unit, escape)}</span></button>`;
   const text = masked(current.unit)
     ? '<span class="matn-lyric-blank" aria-label="Texte caché"></span>'
-    : current.unit.parts?.length
-      ? versePartsHTML(current.unit.parts,escape,phonetic)
-      : matnTextHTML(current.unit.text,escape,phonetic);
+    : matnUnitTextHTML(current.unit, escape, true);
   return `<div class="matn-lyrics ${phonetic?'phonetic-matn':''}" data-focus="${escape(current.unit.id)}">${neighbor(sequence[focus - 1], "before")}<div class="matn-lyric-current ${playing === current.unit.id ? "is-playing" : ""}" dir="${phonetic?'ltr':'rtl'}" lang="${phonetic?'fr':'ar'}" tabindex="0" aria-label="Passage en cours">${text}</div>${neighbor(sequence[focus + 1], "after")}</div>`;
 }
 
 // Library browsing is a continuous document; the lyrics surface is reserved for active audio.
-export function matnLibraryHTML(corpus,{sid,index=0,hidden=false,revealed=[]},escape){const current=corpus.sections.find(ch=>String(ch.id)===String(sid))?.units[index]?.id;return `<div class="matn-library-scroll" tabindex="0" aria-label="${escape(corpus.name)}, lecture continue">${corpus.sections.map(ch=>`<section class="matn-library-chapter"><h2><bdi>${escape(ch.name)}</bdi></h2>${ch.units.map(u=>{const masked=hidden&&!revealed.includes(u.id);return `<button type="button" class="matn-library-unit ${masked?'masked':''}" data-action="matn-select" data-id="${escape(u.id)}" data-matn-unit="${escape(u.id)}" data-corpus="${escape(corpus.id)}" aria-pressed="${u.id===current}" aria-label="Sélectionner ${corpus.unit==='vers'?'le vers '+u.n:'ce passage'}"><span class="matn-library-text" lang="${u.phonetic?'fr':'ar'}" dir="${u.phonetic?'ltr':'rtl'}">${u.parts?.length?versePartsHTML(u.parts,escape,Boolean(u.phonetic)):matnTextHTML(u.text,escape,Boolean(u.phonetic))}</span>${corpus.unit==='vers'?`<span class="matn-library-number">${u.n}</span>`:''}</button>`;}).join('')}</section>`).join('')}</div>`;}
+export function matnLibraryHTML(corpus,{sid,index=0,hidden=false,revealed=[]},escape){const current=corpus.sections.find(ch=>String(ch.id)===String(sid))?.units[index]?.id;return `<div class="matn-library-scroll" tabindex="0" aria-label="${escape(corpus.name)}, lecture continue">${corpus.sections.map(ch=>`<section class="matn-library-chapter"><h2><bdi>${escape(corpus.unit === 'hadith' ? ch.ar : ch.name)}</bdi></h2>${ch.units.map(u=>{const masked=hidden&&!revealed.includes(u.id);return `<button type="button" class="matn-library-unit ${masked?'masked':''}" data-action="matn-select" data-id="${escape(u.id)}" data-matn-unit="${escape(u.id)}" data-corpus="${escape(corpus.id)}" aria-pressed="${u.id===current}" aria-label="Sélectionner ${corpus.unit==='passage'?'ce passage':'le '+corpus.unit+' '+u.n}"><span class="matn-library-text" lang="${u.phonetic?'fr':'ar'}" dir="${u.phonetic?'ltr':'rtl'}">${matnUnitTextHTML(u, escape)}</span>${corpus.unit==='vers'?`<span class="matn-library-number">${u.n}</span>`:''}</button>`;}).join('')}</section>`).join('')}</div>`;}

@@ -44,8 +44,20 @@ export function unitPhonetic(corpus, unit) {
   if (typeof record === 'string') return {text: record, reviewStatus: 'source'};
   if (record && (!record.profile || [PHONETIC_PROFILE, MATN_BOOK_PROFILE].includes(record.profile)) &&
     ['source', 'reviewed'].includes(record.reviewStatus)) return record;
+  if (record?.profile === MATN_BOOK_PROFILE && record.reviewStatus === 'generated' && record.text?.trim())
+    return record;
   return matnReadings[corpus]?.[unit.id] || null;
 }
 export function citationPhonetic(id){return dataset.citations[id]||null;}
-export function phoneticUnit(corpus,unit){const record=unitPhonetic(corpus,unit);return {...unit,text:record?.text||'Phonétique à compléter',parts:record?.parts||[],phonetic:true};}
+export function phoneticUnit(corpus, unit) {
+  const record = unitPhonetic(corpus, unit);
+  return {
+    ...unit,
+    text: record?.text || 'Phonétique à compléter',
+    parts: record?.parts || [],
+    titleAr: record?.title,
+    attribution: record?.attribution,
+    phonetic: true,
+  };
+}
 export function phoneticCorpus(corpus){return {...corpus,sections:corpus.sections.map(s=>({...s,units:s.units.map(u=>phoneticUnit(corpus.id,u))}))};}

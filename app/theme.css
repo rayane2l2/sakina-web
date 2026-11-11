@@ -172,3 +172,9 @@ body:has(.program-guide){overflow:hidden}.shell:has(.program-guide){height:calc(
 
 .phonetic-reading .learning-page .bayt-half[lang="fr"] { font-size: .75em; }
 .reading-guide-content > p { margin: 0; }
+
+.matn-unit-title { display: block; margin-bottom: .5em; font-weight: 700; }
+.matn-attribution { display: block; margin-top: .65em; font-size: .82em; color: #4e6383; }
+.hadith-page { overflow-y: auto; overscroll-behavior: contain; justify-content: safe center; }
+.hadith-page .lyric-track { min-height: min-content; }
+.hadith-page .matn-hidden p { visibility: hidden; }

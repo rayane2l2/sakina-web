@@ -2,7 +2,6 @@ import { calendarDay, createDeadline, deadlineSummary, formatDeadline, requireDe
 import {
   programmeGroups,
   dailyCandidates,
-  editionRoute,
   questionSummary,
 } from "./programme-ux.js";
 import { bookMemory, rememberBook, forgetBook } from "./session-memory.js";
@@ -55,10 +54,9 @@ export function createBooksUI(host) {
     drag = null,
     grading = false,
     saving = false,
-    selectedBook = null,
-    formReturn = "list",
     wizardStep = 0;
   const editions = new Map(),
+    parallelQuestions = new Map(),
     state = () => {
       const db = host.state();
       if (!db.bookStudy) db.bookStudy = emptyStudy();
@@ -163,6 +161,10 @@ export function createBooksUI(host) {
     const data = await response.json();
     if (data.id !== id || !Array.isArray(data.questions))
       throw Error("Livre invalide.");
+    if (data.parallelEditionId) {
+      const parallel = await loadEdition(data.parallelEditionId);
+      parallelQuestions.set(data.id, new Map(parallel.questions.map((q) => [q.id, q])));
+    }
     editions.set(id, data);
     return data;
   }
@@ -183,7 +185,6 @@ export function createBooksUI(host) {
     }
   }
   function newDraft(data, p = null) {
-    formReturn = ["edition", "editions"].includes(mode) ? mode : "list";
     edition = data;
     wizardStep=0;
     editing = p?.id || null;
@@ -223,7 +224,12 @@ export function createBooksUI(host) {
     if (!draft.ranges.length) draft.ranges = [{ from: 1, to: 25 }];
   }
   function frontBlocks(q) {
-    return blocks(q.front);
+    const french = parallelQuestions.get(edition.id)?.get(q.parallelQuestionId);
+    return blocks(q.front) + (french ? `<div class="qa-parallel" lang="fr" dir="ltr">${blocks(french.front)}</div>` : "");
+  }
+  function answerBlocks(q) {
+    const french = parallelQuestions.get(edition.id)?.get(q.parallelQuestionId);
+    return blocks(q.back) + (french ? `<details class="qa-parallel" lang="fr" dir="ltr"><summary>Voir la réponse en français</summary>${blocks(french.back)}</details>` : "");
   }
   function blocks(items) {
     return bookContentHTML(items, (b) => {
@@ -259,28 +265,57 @@ export function createBooksUI(host) {
         : "")
     );
   }
-  async function openEdition(id) {
-    const route = editionRoute(state().programs, id);
-    if (route.type === "start") {
-      await begin(state().programs.find((p) => p.id === route.programId));
-      return;
-    }
-    if (route.type === "create") {
-      newDraft(await loadEdition(id));
+  function editionChoices(query = "", action = "read-edition") {
+    const norm = (value) => String(value || "").normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+    return catalog?.books.filter((book) => norm([book.title, ...book.editions.flatMap((e) => [e.title, e.label])].join(" ")).includes(norm(query)))
+      .map((book) => {
+        const editionButton = (entry, text, style) =>
+          B(text, action, style, `data-edition="${E(entry.id)}" aria-label="${E(book.title + ' · ' + entry.label)}"`);
+        if (book.editions.length === 1)
+          return editionButton(book.editions[0], `<strong>${E(book.title)}</strong><span aria-hidden="true">›</span>`, "guide-choice book-edition-choice");
+        const alternateTitle = book.editions.find((entry) => entry.language === "ar")?.title;
+        return `<section class="card book-edition-group"><h2>${E(book.title)}${alternateTitle ? ` <bdi lang="ar">${E(alternateTitle)}</bdi>` : ""}</h2><div class="row">${book.editions.map((entry) => editionButton(entry, E(entry.label), "secondary")).join("")}</div></section>`;
+      }).join("") || "";
+  }
+  function bookPicker() {
+    return `<section class="program-guide"><header>${B("‹ Retour", "book-back", "text")}<span>2 sur 5</span></header>
+      <div class="progress" aria-label="Création du programme"><i style="width:40%"></i></div>
+      <main><h1>Quel livre veux-tu apprendre ?</h1>${editionChoices("", "choose-edition") || `<p>${E(error || "Aucun livre disponible.")}</p>`}</main></section>`;
+  }
+  function bookReader() {
+    const chapters = new Map(edition.chapters.map(chapter => [chapter.id, chapter.title]));
+    let chapterId;
+    const content = edition.questions.map((q) => {
+      const heading = chapterId !== q.chapterId && chapters.has(q.chapterId)
+        ? `<h2>${E(chapters.get(q.chapterId))}</h2>` : "";
+      chapterId = q.chapterId;
+      return `${heading}<article class="qa-document-entry" dir="${edition.direction === "rtl" ? "rtl" : "ltr"}">
+        <span class="small muted">Question ${q.number}</span><div class="qa-document-question">${frontBlocks(q)}</div>${answerBlocks(q)}</article>`;
+    }).join("");
+    return `<section class="qa-document"><header>${B("‹ Retour", "book-back", "text")}<h1>${E(edition.title)}</h1></header>
+      <div class="qa-document-scroll" tabindex="0" aria-label="Lecture continue">${content}</div></section>
+      ${speedDialog({ playbackRate: host.state().settings.playbackRate }, speedButton)}`;
+  }
+  function back() {
+    if (mode === "form" && wizardStep > 0) {
+      capture();
+      wizardStep--;
       refresh();
       return;
     }
-    edition = await loadEdition(id);
-    mode = "edition";
-    refresh();
-  }
-  function editionMenu() {
-    return `<div class="page-title"><h1>${E(edition.title)}</h1></div><h2 class="section-title">Choisir mon programme</h2>${groupedCards(state().programs.filter((p) => p.editionId === edition.id))}${B("Créer un programme", "create", "secondary block", `data-edition="${E(edition.id)}"`)}`;
-  }
-  function list() {
-    if (error)
-      return `<section class="card"><h2>Livres</h2><p>${E(error)}</p></section>`;
-    return `<div class="page-title"><h1>Livres</h1></div>${state().programs.length ? `<div class="section-head"><h2 class="section-title">Mes programmes</h2>${B("+ Nouveau programme", "create", "secondary compact")}</div>${groupedCards()}` : ""}<h2 class="section-title">Les livres</h2>${catalog?.books.map((book) => `<article class="card qa-book" role="button" tabindex="0" data-book-action="open-book" data-book="${E(book.id)}" aria-label="Ouvrir ${E(book.title)}"><span class="qa-book-symbol" aria-hidden="true">▤</span><div><h3>${E(book.title)}</h3><p class="small muted">Questions-réponses</p><div class="row">${book.editions.map((ed) => B(ed.label, book.editions.length === 1 ? "open-book" : "open-edition", "secondary compact", book.editions.length === 1 ? `data-book="${E(book.id)}"` : `data-edition="${E(ed.id)}"`)).join("")}</div></div></article>`).join("") || "<p>Chargement des livres…</p>"}`;
+    stopAudio();
+    if (mode === "form" && !editing) {
+      mode = "picker";
+      refresh();
+      return;
+    }
+    if (mode === "picker") { host.returnTo("new"); return; }
+    if (mode === "read") { host.returnTo("library"); return; }
+    const target = session?.returnTo?.startsWith("view:") ? session.returnTo.slice(5) : "programs";
+    checkpoint();
+    session = null;
+    mode = "list";
+    host.returnTo(target);
   }
   function legacyForm() {
     const ed = edition,
@@ -301,7 +336,7 @@ export function createBooksUI(host) {
       )
       .join(
         "",
-      )}</div>${selection === "all" ? '<p class="small muted">Toutes les questions, dans l’ordre du livre.</p>' : selection === "chapters" ? `<div class="qa-choice-list">${ed.chapters.map((ch) => `<label style="${ch.parentId ? "padding-left:16px" : ""}"><input type="checkbox" name="chapters" value="${E(ch.id)}" ${draft.chapters.includes(ch.id) ? "checked" : ""}>${E(ch.title)}</label>`).join("")}</div>` : selection === "individual" ? `<div class="qa-choice-list">${ed.questions.map((q) => `<label><input type="checkbox" name="questions" value="${E(q.id)}" ${draft.ids.includes(q.id) ? "checked" : ""}>${q.number}${q.occurrence > 1 ? " (2e)" : ""} · ${E(q.searchText.slice(0, 90))}</label>`).join("")}</div>` : `<div class="qa-ranges">${draft.ranges.map((r, i) => `<div class="qa-range"><label>De la question<input data-from type="number" min="1" max="${Math.max(...ed.questions.map((q) => q.number))}" value="${r.from}" required></label><label>À la question<input data-to type="number" min="1" max="${Math.max(...ed.questions.map((q) => q.number))}" value="${r.to}" required></label>${draft.ranges.length > 1 ? B("×", "remove-range", "text", `data-index="${i}" aria-label="Retirer cette plage"`) : ""}</div>`).join("")}</div>${B("+ Ajouter une plage", "add-range", "text")}`}<label>Nouvelles questions par jour<input name="newPerDay" type="number" min="0" max="1000" value="${draft.newPerDay}" required></label><p class="small muted">Les révisions dues passent avant les nouvelles questions.</p><button class="btn primary block" type="submit">${editing ? "Enregistrer" : "Créer et commencer"}</button>${B("Réviser librement cette sélection", "practice-draft", "secondary block")}${editing ? `<div class="qa-manage-actions">${B(state().programs.find((p) => p.id === editing)?.paused ? "Réactiver" : "Mettre en pause", "pause", "secondary", `data-id="${E(editing)}"`)}${B("Archiver", "archive", "secondary", `data-id="${E(editing)}"`)}${B("Supprimer ce programme", "delete", "danger", `data-id="${E(editing)}"`)}</div>` : ""}</form>${B("Retour aux livres", "list", "text")}`;
+      )}</div>${selection === "all" ? '<p class="small muted">Toutes les questions, dans l’ordre du livre.</p>' : selection === "chapters" ? `<div class="qa-choice-list">${ed.chapters.map((ch) => `<label style="${ch.parentId ? "padding-left:16px" : ""}"><input type="checkbox" name="chapters" value="${E(ch.id)}" ${draft.chapters.includes(ch.id) ? "checked" : ""}>${E(ch.title)}</label>`).join("")}</div>` : selection === "individual" ? `<div class="qa-choice-list">${ed.questions.map((q) => `<label><input type="checkbox" name="questions" value="${E(q.id)}" ${draft.ids.includes(q.id) ? "checked" : ""}>${q.number}${q.occurrence > 1 ? " (2e)" : ""} · ${E(q.searchText.slice(0, 90))}</label>`).join("")}</div>` : `<div class="qa-ranges">${draft.ranges.map((r, i) => `<div class="qa-range"><label>De la question<input data-from type="number" min="1" max="${Math.max(...ed.questions.map((q) => q.number))}" value="${r.from}" required></label><label>À la question<input data-to type="number" min="1" max="${Math.max(...ed.questions.map((q) => q.number))}" value="${r.to}" required></label>${draft.ranges.length > 1 ? B("×", "remove-range", "text", `data-index="${i}" aria-label="Retirer cette plage"`) : ""}</div>`).join("")}</div>${B("+ Ajouter une plage", "add-range", "text")}`}<label>Nouvelles questions par jour<input name="newPerDay" type="number" min="0" max="1000" value="${draft.newPerDay}" required></label><p class="small muted">Les révisions dues passent avant les nouvelles questions.</p><button class="btn primary block" type="submit">${editing ? "Enregistrer" : "Créer et commencer"}</button>${editing ? `<div class="qa-manage-actions">${B(state().programs.find((p) => p.id === editing)?.paused ? "Réactiver" : "Mettre en pause", "pause", "secondary", `data-id="${E(editing)}"`)}${B("Archiver", "archive", "secondary", `data-id="${E(editing)}"`)}${B("Supprimer ce programme", "delete", "danger", `data-id="${E(editing)}"`)}</div>` : ""}</form>`;
   }
   function draftGoal() {
     if (draft.goalMode !== 'date') return undefined;
@@ -326,7 +361,7 @@ export function createBooksUI(host) {
     const html=legacyForm(),doc=new DOMParser().parseFromString(html,'text/html'),form=doc.querySelector('form');
     form.querySelector('.qa-book-title')?.remove();
     const stages=[doc.createElement('section'),doc.createElement('section'),doc.createElement('section')];
-    for(const child of [...form.children]){let stage=0;if(child.matches('label')&&child.querySelector('[name="newPerDay"]'))stage=1;else if(child.tagName==='DETAILS'||child.matches('[type="submit"],.qa-manage-actions')||child.matches('label')&&child.querySelector('[name="name"]'))stage=2;else if(child.hasAttribute('data-book-action')&&['practice-draft'].includes(child.dataset.bookAction))stage=2;else if(child.classList.contains('small'))stage=1;stages[stage].append(child);}
+    for(const child of [...form.children]){let stage=0;if(child.matches('label')&&child.querySelector('[name="newPerDay"]'))stage=1;else if(child.tagName==='DETAILS'||child.matches('[type="submit"],.qa-manage-actions')||child.matches('label')&&child.querySelector('[name="name"]'))stage=2;else if(child.classList.contains('small'))stage=1;stages[stage].append(child);}
 
     const submit=stages[2].querySelector('[type="submit"]');if(submit)submit.textContent=editing?'Enregistrer':'Lancer mon premier entraînement';
     const select=stages[0].querySelector('.qa-modes');if(select)select.classList.add('guide-scope');
@@ -342,10 +377,11 @@ export function createBooksUI(host) {
     }
     if (draft.goalMode==='date' && draft.goalDate)
       stages[2].insertAdjacentHTML('afterbegin', `<p class="guide-note">Objectif le ${E(formatDeadline(draft.goalDate))}</p>`);
-    form.className='guide-book-form';form.innerHTML=`<header class="guide-book-progress"><span>${wizardStep+1} sur 3</span><div class="progress"><i style="width:${100*(wizardStep+1)/3}%"></i></div></header><h2>${heading}</h2><p class="small muted">${E(edition.title)}</p>`;
+    const current = wizardStep + (editing ? 1 : 3), total = editing ? 3 : 5;
+    form.className = "guide-book-form";
+    form.innerHTML = `<header class="guide-book-progress">${B("‹ Retour", "book-back", "text")}<span>${current} sur ${total}</span><div class="progress"><i style="width:${100 * current / total}%"></i></div></header><h1>${heading}</h1><p class="small muted">${E(edition.title)}</p>`;
     stages.forEach((section,i)=>{section.hidden=i!==wizardStep;section.className='guide-book-stage';form.append(section);});
     if(wizardStep<2)form.insertAdjacentHTML('beforeend',B('Continuer →','wizard-next','primary block guide-sticky'));
-    if(wizardStep>0)form.insertAdjacentHTML('beforeend',B('‹ Retour','wizard-back','text block'));
     return form.outerHTML;
   }
   function prepareCard() {
@@ -374,13 +410,7 @@ export function createBooksUI(host) {
     checkpoint();
   }
   async function begin(p, practice = false) {
-    const returnTo = host.active()
-      ? mode === "form"
-        ? "form"
-        : ["edition", "editions"].includes(mode)
-          ? mode
-          : "list"
-      : "view:" + host.currentView();
+    const returnTo = "view:" + (host.active() ? "programs" : host.currentView());
     await host.beforeStudy();
     edition = await loadEdition(p.editionId);
     const saved = bookMemory(host.state(), p, practice);
@@ -452,7 +482,7 @@ export function createBooksUI(host) {
     if (!p) {
       mode = "list";
       session = null;
-      return list();
+      return `<section class="card"><p>Ce programme est introuvable.</p>${B("Retour aux programmes", "book-back", "secondary")}</section>`;
     }
     if (!session.questionId) {
       return `<header class="qa-study-head">${B("‹", "book-back", "qa-close", 'aria-label="Retour au menu précédent"')}<h1>${E(p.name)}</h1></header><main class="qa-finished"><span class="qa-finished-mark">✓</span><h2>${session.practice ? "Toutes les cartes sont réussies." : session.waitingUntil ? "Une courte pause." : "Terminé pour aujourd’hui."}</h2><p role="status" id="qa-waiting">${session.practice ? "" : session.waitingUntil ? `Une carte revient dans ${E(intervalLabel(session.waitingUntil))}. Elle s’ouvrira automatiquement ici.` : session.nextDue ? `Prochaine révision dans ${E(intervalLabel(session.nextDue))}.` : p.newPerDay === 0 ? "Aucune nouvelle question n’est prévue." : p.questionIds.some((id) => !state().cards[cardKey(edition.id, id)]) ? "Les nouvelles questions reviennent demain." : "Toutes les questions sont à jour."}</p>${canUndo() ? B("Annuler la dernière réponse", "undo", "secondary") : ""}${B("Retour à l’accueil", "home", "primary")}</main>`;
@@ -472,28 +502,13 @@ export function createBooksUI(host) {
         }
       : edition.questions.find((q) => q.id === session.questionId);
     const face = session.face === "back";
-    return `<header class="qa-study-head">${B("‹", "book-back", "qa-close", 'aria-label="Retour au menu précédent"')}<div><small>${E(edition.title)}</small><h1>${E(p.name)}</h1></div><div class="qa-study-meta"><span>${session.practice ? `${session.practice.passed.length} / ${session.practice.total}` : `${session.completed + 1} / ${Math.max(session.total, session.completed + 1)}`}</span>${session.practice && !session.demo ? B("Mélanger", "practice-shuffle", "qa-shuffle", `aria-label="Mélanger les cartes restantes" ${session.practice.queue.length < 2 ? "disabled" : ""}`) : ""}</div></header><div class="progress qa-study-progress" role="progressbar" aria-label="Progression de la séance de questions"><i style="width:${session.practice ? (100 * session.practice.passed.length) / session.practice.total : Math.min(100, (100 * session.completed) / Math.max(1, session.total))}%"></i></div><section class="qa-flip-card ${face ? "flipped" : ""}" tabindex="0" role="group" aria-label="Carte question ${q.number}. Appuyez sur Entrée pour la retourner."><div class="qa-card-inner"><div class="qa-face qa-front" ${face ? 'inert aria-hidden="true"' : ""}><div class="qa-card-tag"><span>Question ${q.number}${q.occurrence > 1 ? " (2e)" : ""}</span><span>${session.demo ? "Démonstration" : session.practice ? "Révision libre" : state().cards[cardKey(edition.id, q.id)] ? "Révision" : "Apprendre"}</span></div><div class="qa-card-scroll qa-question-content" tabindex="0" role="region" aria-label="Question défilante" dir="${edition.direction}"><div class="qa-front-content">${frontBlocks(q)}</div></div></div><div class="qa-face qa-back" ${!face ? 'inert aria-hidden="true"' : ""}><div class="qa-card-tag"><span>Question ${q.number}</span><span>Réponse</span></div><div class="qa-card-scroll" tabindex="0" role="region" aria-label="Réponse défilante" dir="${edition.direction}">${blocks(q.back)}</div></div></div></section><footer class="qa-study-footer"><p class="qa-tap-hint" ${face ? "hidden" : ""}>${session.demo ? "Démonstration · aucune réponse enregistrée" : !host.state().settings.bookFlipSeen ? "Touchez la carte pour afficher la réponse." : ""}</p>${session.demo ? B("Passer la démonstration", "skip-demo", "qa-undo") : ""}<div class="qa-ratings ${session.practice ? "qa-practice-ratings" : ""}" ${!face ? "hidden" : ""}>${face ? gradeButtons() : ""}</div>${canUndo() ? B("Annuler", "undo", "qa-undo", 'aria-label="Annuler la dernière réponse"') : ""}</footer>${speedDialog({ playbackRate: host.state().settings.playbackRate }, speedButton)}`;
+    return `<header class="qa-study-head">${B("‹", "book-back", "qa-close", 'aria-label="Retour au menu précédent"')}<div><small>${E(edition.title)}</small><h1>${E(p.name)}</h1></div><div class="qa-study-meta"><span>${session.practice ? `${session.practice.passed.length} / ${session.practice.total}` : `${session.completed + 1} / ${Math.max(session.total, session.completed + 1)}`}</span>${session.practice && !session.demo ? B("Mélanger", "practice-shuffle", "qa-shuffle", `aria-label="Mélanger les cartes restantes" ${session.practice.queue.length < 2 ? "disabled" : ""}`) : ""}</div></header><div class="progress qa-study-progress" role="progressbar" aria-label="Progression de la séance de questions"><i style="width:${session.practice ? (100 * session.practice.passed.length) / session.practice.total : Math.min(100, (100 * session.completed) / Math.max(1, session.total))}%"></i></div><section class="qa-flip-card ${face ? "flipped" : ""}" tabindex="0" role="group" aria-label="Carte question ${q.number}. Appuyez sur Entrée pour la retourner."><div class="qa-card-inner"><div class="qa-face qa-front" ${face ? 'inert aria-hidden="true"' : ""}><div class="qa-card-tag"><span>Question ${q.number}${q.occurrence > 1 ? " (2e)" : ""}</span><span>${session.demo ? "Démonstration" : session.practice ? "Révision libre" : state().cards[cardKey(edition.id, q.id)] ? "Révision" : "Apprendre"}</span></div><div class="qa-card-scroll qa-question-content" tabindex="0" role="region" aria-label="Question défilante" dir="${edition.direction}"><div class="qa-front-content">${frontBlocks(q)}</div></div></div><div class="qa-face qa-back" ${!face ? 'inert aria-hidden="true"' : ""}><div class="qa-card-tag"><span>Question ${q.number}</span><span>Réponse</span></div><div class="qa-card-scroll" tabindex="0" role="region" aria-label="Réponse défilante" dir="${edition.direction}">${answerBlocks(q)}</div></div></div></section><footer class="qa-study-footer"><p class="qa-tap-hint" ${face ? "hidden" : ""}>${session.demo ? "Démonstration · aucune réponse enregistrée" : !host.state().settings.bookFlipSeen ? "Touchez la carte pour afficher la réponse." : ""}</p>${session.demo ? B("Passer la démonstration", "skip-demo", "qa-undo") : ""}<div class="qa-ratings ${session.practice ? "qa-practice-ratings" : ""}" ${!face ? "hidden" : ""}>${face ? gradeButtons() : ""}</div>${canUndo() ? B("Annuler", "undo", "qa-undo", 'aria-label="Annuler la dernière réponse"') : ""}</footer>${speedDialog({ playbackRate: host.state().settings.playbackRate }, speedButton)}`;
   }
   function render() {
-    return mode === "study"
-      ? study()
-      : mode === "form"
-        ? form()
-        : mode === "edition"
-          ? editionMenu()
-          : mode === "editions"
-            ? `<h1>Choisir la langue</h1>${catalog.books
-                .find((b) => b.id === selectedBook)
-                .editions.map((ed) =>
-                  B(
-                    ed.label,
-                    "open-edition",
-                    "secondary block",
-                    `data-edition="${E(ed.id)}"`,
-                  ),
-                )
-                .join("")}`
-            : list();
+    if (mode === "study") return study();
+    if (mode === "form") return form();
+    if (mode === "read") return bookReader();
+    return bookPicker();
   }
   function flip() {
     if (!session?.questionId) return;
@@ -530,7 +545,7 @@ export function createBooksUI(host) {
     }
     e.preventDefault();
     const a = el.dataset.bookAction;
-    if(a==='wizard-next'||a==='wizard-back'){capture();if(a==='wizard-next'&&wizardStep===1)try{draftGoal();}catch(error){host.toast(error.message);return;}if(a==='wizard-next'&&draft.mode==='individual'&&!draft.ids.length){host.toast('Choisis au moins une question.');return;}if(a==='wizard-next'&&draft.mode==='chapters'&&!draft.chapters.length){host.toast('Choisis au moins un chapitre.');return;}wizardStep=Math.max(0,Math.min(2,wizardStep+(a==='wizard-next'?1:-1)));refresh();return;}
+    if(a==='wizard-next'){capture();if(a==='wizard-next'&&wizardStep===1)try{draftGoal();}catch(error){host.toast(error.message);return;}if(a==='wizard-next'&&draft.mode==='individual'&&!draft.ids.length){host.toast('Choisis au moins une question.');return;}if(a==='wizard-next'&&draft.mode==='chapters'&&!draft.chapters.length){host.toast('Choisis au moins un chapitre.');return;}wizardStep=Math.max(0,Math.min(2,wizardStep+1));refresh();return;}
     if(a==='wizard-goal'){capture();draft.goalMode=el.dataset.value;refresh();return;}
     if(a==='wizard-pace'){capture();draft.newPerDay=Number(el.dataset.value);refresh();return;}
     try {
@@ -542,18 +557,20 @@ export function createBooksUI(host) {
         refresh();
         return;
       }
-      if (a === "open-book") {
-        const book = catalog.books.find((b) => b.id === el.dataset.book);
-        if (book.editions.length === 1) {
-          selectedBook = null;
-          await openEdition(book.editions[0].id);
-        } else {
-          selectedBook = book.id;
-          mode = "editions";
-          refresh();
+      if (a === "read-edition" || a === "choose-edition") {
+        if (a === "choose-edition" && (!host.active() || mode !== "picker")) return;
+        el.disabled = true;
+        await host.beforeStudy();
+        const data = await loadEdition(el.dataset.edition);
+        if (a === "choose-edition") newDraft(data);
+        else {
+          edition = data;
+          session = null;
+          mode = "read";
         }
+        refresh();
+        return;
       }
-      if (a === "open-edition") await openEdition(el.dataset.edition);
       if (a === "home") {
         checkpoint();
         session = null;
@@ -561,53 +578,7 @@ export function createBooksUI(host) {
         host.returnTo("home");
         return;
       }
-      if (a === "book-back") {
-        if (mode === "study") {
-          checkpoint();
-          const returnTo = session?.returnTo;
-          session = null;
-          mode =
-            returnTo === "form" && draft
-              ? "form"
-              : ["edition", "editions"].includes(returnTo)
-                ? returnTo
-                : "list";
-          if (returnTo?.startsWith("view:")) {
-            host.returnTo(returnTo.slice(5));
-            return;
-          }
-        } else if (mode === "form") {
-          mode = formReturn;
-        } else if (mode === "edition") {
-          mode = selectedBook ? "editions" : "list";
-        } else if (mode === "editions") {
-          selectedBook = null;
-          mode = "list";
-        }
-        refresh();
-        return;
-      }
-      if (a === "list") {
-        checkpoint();
-        session = null;
-        mode = "list";
-        refresh();
-      }
-      if (a === "create") {
-        await host.beforeStudy();
-        if (
-          !el.dataset.edition &&
-          catalog.books.flatMap((b) => b.editions).length > 1
-        ) {
-          session = null;
-          mode = "list";
-          refresh();
-          return;
-        }
-        const id = el.dataset.edition || catalog.books[0].editions[0].id;
-        newDraft(await loadEdition(id));
-        refresh();
-      }
+      if (a === "book-back") { back(); return; }
       if (a === "edit") {
         const p = state().programs.find((p) => p.id === el.dataset.id);
         newDraft(await loadEdition(p.editionId), p);
@@ -634,23 +605,6 @@ export function createBooksUI(host) {
       }
       if (a === "practice") {
         const p = state().programs.find((p) => p.id === el.dataset.id);
-        await begin(p, true);
-      }
-      if (a === "practice-draft") {
-        capture();
-        const p = {
-          ...createBookProgram(edition, {
-            name: draft.name,
-            newPerDay: 0,
-            selection: {
-              mode: draft.mode,
-              chapters: draft.chapters,
-              ranges: draft.ranges,
-              ids: draft.ids,
-            },
-          }),
-          id: "practice:" + edition.id,
-        };
         await begin(p, true);
       }
       if (a === "skip-demo" && session?.demo) {
@@ -701,8 +655,8 @@ export function createBooksUI(host) {
               ? "Programme mis en pause."
               : "Programme réactivé.",
         );
-        mode = formReturn;
-        refresh();
+        host.returnTo("programs");
+        return;
       }
       if (a === "refresh") {
         prepareCard();
@@ -745,8 +699,8 @@ export function createBooksUI(host) {
         });
         forgetBook(host.state(), el.dataset.id);
         host.save();
-        mode = "list";
-        refresh();
+        host.returnTo("programs");
+        return;
       }
       if (a === "audio") {
         if (clip?.getAttribute("src") === el.dataset.src && !clip.paused) {
@@ -826,14 +780,12 @@ export function createBooksUI(host) {
         await commit({
           ...state(),
           programs: state().programs.map((old) =>
-            old.id === editing ? p : old,
+            old.id === editing ? { ...old, ...p, goal: p.goal } : old,
           ),
         });
       else await commit({ ...state(), programs: [...state().programs, p] });
-      session = { programId: p.id, completed: 0 };
-      mode = "study";
-      prepareCard();
-      refresh();
+      if (editing) host.returnTo("programs");
+      else await begin(p);
     } catch (e) {
       host.toast(e.message);
     } finally {
@@ -882,15 +834,6 @@ export function createBooksUI(host) {
   }
   function bind(root) {
     root.addEventListener("click", action);
-    root.addEventListener("keydown", (e) => {
-      if (
-        (e.key === "Enter" || e.key === " ") &&
-        e.target.matches('[data-book-action="open-book"]')
-      ) {
-        e.preventDefault();
-        e.target.click();
-      }
-    });
     root.addEventListener("submit", submit);
     root.addEventListener("change", (event) => {
       if (event.target.matches('#book-program-form [name="goalDate"]')) { capture(); refresh(); }
@@ -963,18 +906,16 @@ export function createBooksUI(host) {
     init,
     bind,
     render,
-    searchResults: (query) => {
-      const norm = (t) =>
-        t.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
-      return (
-        catalog?.books
-          .filter((b) => norm(b.title).includes(norm(query)))
-          .map((b) =>
-            B(E(b.title), "open-book", "section-row", `data-book="${E(b.id)}"`),
-          )
-          .join("") || ""
-      );
+    searchResults: (query) => editionChoices(query),
+    libraryList: () => {
+      const rows = editionChoices();
+      return rows ? '<section class="qa-library-books"><h2 class="section-title">Livres questions-réponses</h2>' + rows + '</section>' : "";
     },
+    chooseForProgram: () => {
+      mode = "picker";
+      refresh();
+    },
+    navigationTab: () => mode === "read" ? "library" : "programs",
     dailyInfo: () => recommendation() || null,
     persist: async (study) =>
       saveBookStudy(validateBookStudy(study || emptyStudy())),
@@ -1006,31 +947,9 @@ export function createBooksUI(host) {
         (p) => p.id === id && !p.paused && !p.archived,
       );
       if (p) await begin(p);
-      else {
-        mode = "list";
-        refresh();
-      }
+      else host.returnTo("programs");
     },
-    back: () => {
-      if(mode==="form"&&wizardStep>0){capture();wizardStep--;refresh();return;}
-      stopAudio();
-      checkpoint();
-      const returnTo = session?.returnTo;
-      session = null;
-      mode =
-        mode === "study"
-          ? returnTo === "edition"
-            ? "edition"
-            : returnTo === "form" && draft
-              ? "form"
-              : "list"
-          : mode === "form"
-            ? formReturn
-            : mode === "edition" && selectedBook
-              ? "editions"
-              : "list";
-      refresh();
-    },
+    back,
     setSpeed: (rate) => {
       if (clip) clip.playbackRate = rate;
     },

@@ -11,6 +11,14 @@
           "label": "Français",
           "direction": "ltr",
           "file": "data/books/rejouissance-fr/edition.json"
+        },
+        {
+          "id": "rejouissance-ar",
+          "title": "بهجة النظر",
+          "language": "ar",
+          "label": "Arabe",
+          "direction": "rtl",
+          "file": "data/books/rejouissance-ar/edition.json"
         }
       ]
     },
@@ -24,6 +32,14 @@
           "label": "Français",
           "direction": "ltr",
           "file": "data/books/but-etudiants-fr/edition.json"
+        },
+        {
+          "id": "but-etudiants-ar",
+          "title": "مقصد الطالبين",
+          "language": "ar",
+          "label": "Arabe",
+          "direction": "rtl",
+          "file": "data/books/but-etudiants-ar/edition.json"
         }
       ]
     }

@@ -796,3 +796,83 @@ body {
 .tajweed-legend{font:700 12px/1.5 Nunito,sans-serif;border:1px solid #e3eaf5;border-radius:14px;background:#f8faff;padding:10px 12px;margin-bottom:12px;color:#293b56}.tajweed-legend summary{cursor:pointer;min-height:25px}.tajweed-legend-rules{max-height:230px;overflow-y:auto;overscroll-behavior:contain;padding-top:8px}.tajweed-legend-rules details{padding:5px 0}.tajweed-legend-rules p{font:400 12px/1.5 Nunito,sans-serif!important;text-align:left!important;margin:4px 0 6px 23px!important;color:#53657d!important}.tajweed-swatch{display:inline-block;width:12px;height:12px;border-radius:50%;background:currentColor;margin:0 8px 0 4px;vertical-align:middle}.tj-liaison{color:#707070}.tj-madd-normal{color:#ffb300}.tj-madd-permitted{color:#ff6600}.tj-madd-connected{color:#ff0000}.tj-madd-necessary{color:#ff00ff}.tj-nasal{color:#00ff00}.tj-qalqalah{color:#0000ff}.tj-assimilation{color:#8000ff}.tajweed-segment{display:inline;font:inherit}.quran-word.is-check{background:#ffead4}.quran-word.is-check .tajweed-segment{color:inherit}
 
 .first-choices{display:grid;gap:12px}.first-choices .btn{margin:0}.reading-resume{margin:4px 0 18px;background:#f5f8ff!important;border:1px solid #e2e9f7!important;box-shadow:none!important;text-align:left;justify-content:flex-start!important;color:#2859c4!important}.reading-resume small{display:block;margin-top:4px;font-size:11px;font-weight:500;color:#71809a}.quran-size-setting{display:grid;gap:10px;padding:12px 0;color:#71809a;font-size:12px}.quran-size-setting input{width:100%;accent-color:#2859c4}.verse-listen{width:36px;justify-content:center}.verse-listen svg{width:16px;height:16px}
+.qa-library-books .book-edition-choice {
+  width: 100%;
+  margin-block: 0 10px;
+}
+
+.guide-book-progress,
+.qa-document > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.guide-book-progress > .progress {
+  flex-basis: 100%;
+}
+
+.qa-document > header h1 {
+  flex: 1;
+  margin: 0;
+  font-size: clamp(1.25rem, 4vw, 1.65rem);
+}
+
+.qa-document-scroll {
+  max-height: max(15rem, calc(100dvh - 230px - env(safe-area-inset-top) - env(safe-area-inset-bottom)));
+  margin-top: 14px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 18px clamp(14px, 4vw, 25px);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+}
+
+.qa-document-entry {
+  padding-block: 20px;
+  border-bottom: 1px solid var(--line);
+  content-visibility: auto;
+  contain-intrinsic-block-size: auto 14rem;
+}
+
+.qa-document-question {
+  font-weight: 800;
+}
+
+.book-edition-group {
+  margin-bottom: 12px;
+}
+
+.book-edition-group h2 {
+  margin: 0 0 12px;
+  font-size: 1.1rem;
+}
+
+.book-edition-group h2 bdi {
+  display: block;
+  margin-top: 4px;
+}
+
+.book-edition-group .row {
+  display: flex;
+  gap: 8px;
+}
+
+.book-edition-group .row > button {
+  flex: 1;
+}
+
+.qa-parallel {
+  margin-top: 14px;
+  padding: 12px 0 0;
+  border-top: 1px solid var(--line);
+  text-align: left;
+  font-weight: 500;
+}
+
+.qa-parallel summary {
+  color: var(--accent, #2859c4);
+  padding-block: 8px;
+}

@@ -272,12 +272,11 @@ function nav() {
   return `<nav class="nav" aria-label="Navigation principale">${[
     ["home", "home", "Aujourd’hui"],
     ["library", "book", "Bibliothèque"],
-    ["books", "book", "Livres"],
     ["programs", "layers", "Programmes"],
   ]
     .map(
       ([id, i, label]) =>
-        `<button data-action="nav" data-view="${id}" ${view === id ? 'aria-current="page"' : ""}>${icon(i)}<span>${label}</span></button>`,
+        `<button data-action="nav" data-view="${id}" ${(view === id || (view === "new" && id === "programs") || (view === "books" && books.navigationTab() === id)) ? 'aria-current="page"' : ""}>${icon(i)}<span>${label}</span></button>`,
     )
     .join("")}</nav>`;
 }
@@ -726,10 +725,10 @@ function library() {
   const c = corpora[libraryCorpus];
   return `${title("Bibliothèque")}<div class="seg library-corpora">${Object.keys(
     corpora,
-  )
+  ).concat("books")
     .map((id) =>
       button(
-        esc(corpusName(corpora[id])),
+        id === "books" ? "Livres" : esc(corpusName(corpora[id])),
         "corpus",
         libraryCorpus === id ? "selected" : "",
         `data-corpus="${id}"`,
@@ -737,10 +736,10 @@ function library() {
     )
     .join(
       "",
-    )}</div><label class="search">${icon("book")}<input id="search" type="search" placeholder="Rechercher une sourate, un matan, un livre…" value="${esc(search)}"></label>${libraryCorpus !== "quran" ? button("Écouter " + esc(corpusName(c)) + " en entier", "listen-entire", "secondary block", `data-corpus="${libraryCorpus}"`) : ""}${c.reviewStatus === "needs_review" ? '<p class="small muted">Texte importé · relecture à terminer.</p>' : ""}${libraryCorpus === "quran" ? `<div class="page-jump"><label for="page-number">Mushaf · 604 pages</label><div><input type="number" id="page-number" min="1" max="604" value="${reader.page || 1}" aria-label="Numéro de page">${button("Ouvrir la page", "jump-page", "secondary compact")}</div></div>` : ""}<div id="section-list">${libraryResults()}</div>`;
+    )}</div><label class="search">${icon("book")}<input id="search" type="search" placeholder="Rechercher une sourate, un matan, un livre…" value="${esc(search)}"></label>${c && libraryCorpus !== "quran" ? button("Écouter " + esc(corpusName(c)) + " en entier", "listen-entire", "secondary block", `data-corpus="${libraryCorpus}"`) : ""}${c?.reviewStatus === "needs_review" ? '<p class="small muted">Texte importé · relecture à terminer.</p>' : ""}${libraryCorpus === "quran" ? `<div class="page-jump"><label for="page-number">Mushaf · 604 pages</label><div><input type="number" id="page-number" min="1" max="604" value="${reader.page || 1}" aria-label="Numéro de page">${button("Ouvrir la page", "jump-page", "secondary compact")}</div></div>` : ""}<div id="section-list">${libraryResults()}</div>`;
 }
 function libraryResults() {
-  if (!search.trim()) return sectionRows(corpora[libraryCorpus]);
+  if (!search.trim()) return libraryCorpus === "books" ? books.libraryList() : sectionRows(corpora[libraryCorpus]);
   const results =
     Object.values(corpora)
       .map((c) => {
@@ -771,7 +770,7 @@ function sectionRows(c, empty = false) {
 }
 function programs() {
   const g = programmeGroups(db.programs);
-  return `${title("Programmes")}<div class="section-head">${db.programs.length || books.hasPrograms() ? button("+ Nouveau", "new", "secondary compact") : ""}</div>${g.active.map(programCard).join("")}${g.paused.length ? `<details class="programme-fold"><summary>En pause · ${g.paused.length}</summary>${g.paused.map(programCard).join("")}</details>` : ""}${g.archived.length ? `<details class="programme-fold"><summary>Archivés · ${g.archived.length}</summary>${g.archived.map(programCard).join("")}</details>` : ""}${books.programCards()}${!db.programs.length && !books.hasPrograms() ? `<div class="card first-choices">${button("Mémoriser un texte", "new", "primary block")}${button("Apprendre un livre", "nav", "secondary block", 'data-view="books"')}</div>` : ""}`;
+  return `${title("Programmes")}<div class="section-head">${button("Créer un programme", "new", "primary block")}</div>${g.active.map(programCard).join("")}${g.paused.length ? `<details class="programme-fold"><summary>En pause · ${g.paused.length}</summary>${g.paused.map(programCard).join("")}</details>` : ""}${g.archived.length ? `<details class="programme-fold"><summary>Archivés · ${g.archived.length}</summary>${g.archived.map(programCard).join("")}</details>` : ""}${books.programCards()}`;
 }
 
 let draft = {
@@ -841,7 +840,7 @@ function applyPrior(p, form) {
   };
 }
 let programWizard;
-function guide(){return programWizard??=createProgramWizard({corpora,index:pageIndex,M,resolve:findUnit,today:day,refresh:render,onExit:()=>{view="programs";render();},onBooks:()=>{view="books";render();},onSave:(p,start)=>{if(start&&p.corpus==="quran")p.memo=seedLongSurahs(p.memo,corpora.quran.sections,id=>findUnit("quran",id),day());if(db.programs.some(x=>x.id===p.id)){const previous=db.programs.find(x=>x.id===p.id);if(JSON.stringify(previous.goal)!==JSON.stringify(p.goal))forgetLesson(db,p.id);db.programs=db.programs.map(x=>x.id===p.id?p:x);}else db.programs.push(p);stateSave();editing=null;if(start)void startProgram(p.id).catch(e=>toast(e.message));else{view="programs";render();}toast("Programme enregistré.");}});}
+function guide(){return programWizard??=createProgramWizard({corpora,index:pageIndex,M,resolve:findUnit,today:day,refresh:render,onExit:()=>{view="programs";render();},onBooks:()=>books.chooseForProgram(),onSave:(p,start)=>{if(start&&p.corpus==="quran")p.memo=seedLongSurahs(p.memo,corpora.quran.sections,id=>findUnit("quran",id),day());if(db.programs.some(x=>x.id===p.id)){const previous=db.programs.find(x=>x.id===p.id);if(JSON.stringify(previous.goal)!==JSON.stringify(p.goal))forgetLesson(db,p.id);db.programs=db.programs.map(x=>x.id===p.id?p:x);}else db.programs.push(p);stateSave();editing=null;if(start)void startProgram(p.id).catch(e=>toast(e.message));else{view="programs";render();}toast("Programme enregistré.");}});}
 function newProgram() {
   return guide().render()+(editing?`<div class="qa-manage-actions">${button("Mettre en pause / réactiver","pause-program","secondary",`data-id="${editing}"`)}${button("Archiver","archive-program","secondary",`data-id="${editing}"`)}${button("Supprimer ce programme","delete-program","danger",`data-id="${editing}"`)}</div>`:"");
 }
@@ -1168,7 +1167,7 @@ function settings() {
           })
           .join("")
       : '<p class="muted">Une étoile dans la lecture, et tu retrouves ton passage ici.</p>'
-  }</section><details class="card"><summary>À propos du suivi vocal</summary><p class="small muted">Sakina.me · version 1.29</p><p>Zipformer Quran v3.1 · Quran Lab, via ReciteQuran et le moteur local sherpa-onnx. Reconnaissance des phonèmes en Hafs. Retours expérimentaux, sans validation automatique du tajwid.</p><p>Application personnelle et gratuite. Aucune publicité, aucun compte, aucun envoi d’audio.</p><a href="vendor/LICENSE-ReciteQuran.txt">Conditions ReciteQuran</a> · <a href="THIRD_PARTY_NOTICES.txt">Sources et licences</a></details>`;
+  }</section><details class="card"><summary>À propos du suivi vocal</summary><p class="small muted">Sakina.me · version 1.30</p><p>Zipformer Quran v3.1 · Quran Lab, via ReciteQuran et le moteur local sherpa-onnx. Reconnaissance des phonèmes en Hafs. Retours expérimentaux, sans validation automatique du tajwid.</p><p>Application personnelle et gratuite. Aucune publicité, aucun compte, aucun envoi d’audio.</p><a href="vendor/LICENSE-ReciteQuran.txt">Conditions ReciteQuran</a> · <a href="THIRD_PARTY_NOTICES.txt">Sources et licences</a></details>`;
 }
 async function resetVoice() {
   errorStreak.reset();
@@ -2515,7 +2514,7 @@ async function offlineStore() {
       return createOfflineStore({
         manifest: await response.json(),
         baseURL: location.href,
-        shellCache: "sakina-recite-v42",
+        shellCache: "sakina-recite-v44",
       });
     })().catch((error) => {
       offlineStorePromise = null;

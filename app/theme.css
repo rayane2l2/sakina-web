@@ -137,19 +137,6 @@ body:has(.program-guide){overflow:hidden}.shell:has(.program-guide){height:calc(
 .phonetic-key-row dd { margin: 0; }
 .phonetic-key-row dd[lang="ar"] { font: 400 23px/1.25 Amiri, serif; }
 
-.quran-book-tools {
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 7px;
-  align-items: start;
-  background: #f4f7fc;
-  padding: 4px 0 8px;
-}
-.quran-book-tools > details { margin: 0; }
-.quran-book-tools > .quran-verse-help { grid-column: 1 / -1; margin: 0; padding: 3px 0; }
 .quran-book-sheet .phonetic-audio-word {
   border-radius: 4px;
   padding: 2px 0;
@@ -161,3 +148,27 @@ body:has(.program-guide){overflow:hidden}.shell:has(.program-guide){height:calc(
   text-decoration-thickness: 2px;
   text-underline-offset: 4px;
 }
+
+.reading-guide-content {
+  display: grid;
+  gap: 18px;
+  padding-top: 8px;
+  text-align: left;
+}
+.reading-guide-content h3 { margin: 6px 0; font-size: 16px; }
+.reading-guide-content dl { margin: 0; }
+.tajweed-key > div { padding: 9px 0; border-top: 1px solid #e5ebf5; }
+.tajweed-key dt { font-weight: 800; }
+.tajweed-key dd { margin: 3px 0 0 24px; color: #4f607b; font-size: 13px; }
+.phonetic-reading .matn-library-text[lang="fr"],
+.phonetic-reading .matn-page p,
+.phonetic-matn .matn-lyric-current,
+.phonetic-matn .matn-lyric-neighbor span {
+  font-family: Georgia, "Times New Roman", serif !important;
+  overflow-wrap: anywhere;
+}
+.phonetic-reading .bayt-half[lang="fr"] { font-size: clamp(15px, 3.9vw, 22px); line-height: 1.6; }
+.phonetic-reading .matn-page .matn-hidden p { visibility: hidden; }
+
+.phonetic-reading .learning-page .bayt-half[lang="fr"] { font-size: .75em; }
+.reading-guide-content > p { margin: 0; }

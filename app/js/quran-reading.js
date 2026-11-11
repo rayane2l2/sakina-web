@@ -1,4 +1,4 @@
-import {versePhoneticHTML,phoneticLegend} from './phonetic-view.js';
+import {versePhoneticHTML} from './phonetic-view.js';
 import {
   RECITER_AUDIO_FOLDERS,
   playbackWord,
@@ -6,7 +6,7 @@ import {
   printedPositions,
   canonicalPositions,
 } from "./quran-audio-sync.js";
-import { tajweedWord, tajweedLegend } from "./tajweed.js";
+import { tajweedWord } from "./tajweed.js";
 export const quranReadingMode = (value) =>
   value === "verses" || value === "phonetic" ? "verses" : "mushaf";
 export const quranTextSize = (value) =>
@@ -61,8 +61,8 @@ export function verseRowsHTML({ units, sections, resolve, wordPlaying, printedPl
 }
 
 export function verseReadingHTML(config, escape) {
-  const { size = 40, showHint = true, tajweed } = config;
-  return `<div class="quran-verse-scroll quran-book-reading" tabindex="0" aria-label="Lecture du Coran en arabe et en phonétique" style="--quran-text-size:${quranTextSize(size)}px"><div class="quran-book-tools">${tajweed ? tajweedLegend(escape) : ''}${phoneticLegend()}${showHint ? '<p class="quran-verse-help">Touche un mot pour l’écouter. ▶ lit le verset.</p>' : ''}</div><div class="quran-book-sheet">${verseRowsHTML(config, escape)}</div></div>`;
+  const { size = 40 } = config;
+  return `<div class="quran-verse-scroll quran-book-reading" tabindex="0" aria-label="Lecture du Coran en arabe et en phonétique" style="--quran-text-size:${quranTextSize(size)}px"><div class="quran-book-sheet">${verseRowsHTML(config, escape)}</div></div>`;
 }
 
 const bookChunkSize = 24;
@@ -96,14 +96,10 @@ function visibleBookRow(sheet, top) {
   return children[Math.min(lo, children.length - 1)];
 }
 
-export function verseBookViewportTop(scroller) {
-  return scroller.querySelector('.quran-book-tools')?.getBoundingClientRect().bottom ?? scroller.getBoundingClientRect().top;
-}
-
 export function verseBookPosition(scroller) {
   const sheet = scroller?.querySelector('.quran-book-sheet');
   if (!sheet?.children.length) return null;
-  const top = verseBookViewportTop(scroller);
+  const top = scroller.getBoundingClientRect().top;
   const row = visibleBookRow(sheet, top + 1);
   return {
     id: row.dataset.verseKey || row.dataset.bookHeadingFor,
@@ -135,7 +131,7 @@ export function mountVerseBook(scroller, config, escape) {
     || sheet.querySelector(`[data-verse-key="${id}"]`);
   if (restored?.top === 0 && start === 0) scroller.scrollTop = 0;
   else if (target && (at > 0 || restored))
-    scroller.scrollTop += target.getBoundingClientRect().top - verseBookViewportTop(scroller) - (restored?.offset ?? 8);
+    scroller.scrollTop += target.getBoundingClientRect().top - scroller.getBoundingClientRect().top - (restored?.offset ?? 8);
 
   let frame = 0;
   scroller.addEventListener('scroll', () => {

@@ -1,5 +1,5 @@
 import {cleanMatnText} from './matn-format.js';
-import {setTransliterations} from './transliteration.js';
+import {setMatnTransliterations, setTransliterations} from './transliteration.js';
 import { MATN_SPECS, buildImportedMatn } from "./matn-corpus.js";
 import { buildPageUnits, splitPageUnits } from "./page-core.js";
 import { buildMacroIndex } from "./macro-plan.js";
@@ -11,7 +11,7 @@ export let corpora,
   tajweedData;
 let indexes, pageSections;
 export async function loadData() {
-  const [q, m, p, index, tajweed, transliterations, continuous, ...imported] = await Promise.all(
+  const [q, m, p, index, tajweed, transliterations, matnTransliterations, continuous, ...imported] = await Promise.all(
     [
       "quran",
       "ibn-ashir",
@@ -19,6 +19,7 @@ export async function loadData() {
       "page-index",
       "tajweed",
       "transliterations-book-v2",
+      "matn-phonetics",
       "matn-continuous",
       ...MATN_SPECS.map((s) => s.file),
     ].map(async (name) => {
@@ -29,6 +30,7 @@ export async function loadData() {
   );
   tajweedData = tajweed;
   setTransliterations(transliterations);
+  setMatnTransliterations(matnTransliterations);
   const quran = q.surahs.map((s) => ({
     id: String(s.n),
     name: s.name,

@@ -96,5 +96,7 @@ export function tajweedWord(text, id, position, coordinate, data, escape) {
   return result + escape(text.slice(at));
 }
 export function tajweedLegend(escape) {
-  return `<details class="tajweed-legend"><summary>Couleurs du tajwid</summary><div class="tajweed-legend-rules">${TAJWEED_GROUPS.map((g) => `<details><summary><i class="tajweed-swatch tj-${g.id}" aria-hidden="true"></i>${escape(g.label)}</summary><p>${escape(g.description)}</p></details>`).join("")}</div></details>`;
+  return `<dl class="tajweed-key">${TAJWEED_GROUPS.map((group) =>
+    `<div><dt><i class="tajweed-swatch tj-${group.id}" aria-hidden="true"></i>${escape(group.label)}</dt><dd>${escape(group.description)}</dd></div>`,
+  ).join("")}</dl>`;
 }

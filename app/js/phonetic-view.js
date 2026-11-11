@@ -1,5 +1,4 @@
-import {versePartsHTML} from './matn-format.js';
-import {quranPhonetic,unitPhonetic,phoneticUnit} from './transliteration.js';
+import {quranPhonetic} from './transliteration.js';
 import {BOOK_PHONETIC_LETTERS} from './quran-book-phonetics.js';
 const E = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
@@ -8,12 +7,12 @@ const E = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({
 const bookText = (text) => E(text).replace(/ع/g, '<bdi class="book-ain" lang="ar">ع</bdi>');
 const signs = [['*', 'Son nasal'], ['â', 'a prolongé'], ['î', 'i prolongé'], ['oû', 'ou prolongé']];
 
-export function phoneticLegend() {
+export function phoneticKeyHTML() {
   const rows = [...signs, ...BOOK_PHONETIC_LETTERS].map(([symbol, meaning], index) =>
     '<div class="phonetic-key-row"><dt>' + bookText(symbol) + '</dt><dd' +
     (index >= signs.length ? ' lang="ar"' : '') + '>' + E(meaning) + '</dd></div>',
   ).join('');
-  return '<details class="phonetic-legend"><summary>Lire la phonétique</summary><dl>' + rows + '</dl></details>';
+  return '<dl class="phonetic-key">' + rows + '</dl>';
 }
 
 export function readingTabs(mode, button, corpus = 'quran') {
@@ -47,4 +46,3 @@ export function versePhoneticHTML(unit, options) {
   return '<p class="verse-phonetic" lang="fr" dir="ltr">(' + content + ')</p>';
 }
 export const phoneticPendingHTML=()=>`<div class="phonetic-pending"><h2>Phonétique en préparation</h2><p>La transcription relue de ce passage n’est pas encore disponible.</p><button type="button" class="btn secondary" data-action="matn-reading-mode" data-mode="text">Lire le texte arabe</button></div>`;
-export function matnPhoneticHTML(corpus,unit,hidden=false){const record=unitPhonetic(corpus,unit),text=hidden?'':(record?.parts?.length?versePartsHTML(record.parts,E,true):null)||E(record?.text||'Phonétique à compléter');return `<div class="verse phonetic-matn-unit" data-verse="${E(unit.id)}"><p lang="fr" dir="ltr">${text}</p><small>${E(unit.n)}</small></div>`;}

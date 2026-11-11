@@ -1,6 +1,7 @@
 // French reading convention observed in the supplied Le But des étudiants.
 // Generated transcriptions are explicitly distinguished from printed source transcriptions.
 export const PHONETIC_PROFILE='fr-distinct-v2';
+export const MATN_BOOK_PROFILE = 'fr-book-matn-v1';
 const letters={'ء':'ʾ','أ':'ʾ','إ':'ʾ','ؤ':'ʾ','ئ':'ʾ','ب':'b','ت':'t','ث':'ṯ','ج':'j','ح':'ḥ','خ':'ḫ','د':'d','ذ':'ḏ','ر':'r','ز':'z','س':'s','ش':'š','ص':'ṣ','ض':'ḍ','ط':'ṭ','ظ':'ẓ','ع':'ʿ','غ':'ġ','ف':'f','ق':'q','ك':'k','ل':'l','م':'m','ن':'n','ه':'h','و':'w','ي':'y','ى':'y','ة':'t'};
 const vowels={'َ':'a','ِ':'i','ُ':'ou','ً':'an','ٍ':'in','ٌ':'oun','ٰ':'a'};
 export function phonemesToFrench(value){
@@ -32,9 +33,19 @@ export function vocalizedArabicToFrench(value){
  }).join(' ');
 }
 let dataset={quran:{},corpora:{},citations:{}};
+let matnReadings = {};
 export function setTransliterations(data){if(data?.schema!==1||data.profile!==PHONETIC_PROFILE)throw Error('Phonétique incompatible');dataset=data;}
+export function setMatnTransliterations(data) {
+  matnReadings = data?.schema === 1 && data.profile === MATN_BOOK_PROFILE ? data.corpora || {} : {};
+}
 export function quranPhonetic(id){return dataset.quran[id]||null;}
-export function unitPhonetic(corpus,unit){const record=unit.transliteration||dataset.corpora[corpus]?.[unit.id];if(typeof record==='string')return {text:record,reviewStatus:'source'};return record&&(!record.profile||record.profile===PHONETIC_PROFILE)&&['source','reviewed'].includes(record.reviewStatus)?record:null;}
+export function unitPhonetic(corpus, unit) {
+  const record = unit.transliteration || dataset.corpora[corpus]?.[unit.id];
+  if (typeof record === 'string') return {text: record, reviewStatus: 'source'};
+  if (record && (!record.profile || [PHONETIC_PROFILE, MATN_BOOK_PROFILE].includes(record.profile)) &&
+    ['source', 'reviewed'].includes(record.reviewStatus)) return record;
+  return matnReadings[corpus]?.[unit.id] || null;
+}
 export function citationPhonetic(id){return dataset.citations[id]||null;}
 export function phoneticUnit(corpus,unit){const record=unitPhonetic(corpus,unit);return {...unit,text:record?.text||'Phonétique à compléter',parts:record?.parts||[],phonetic:true};}
 export function phoneticCorpus(corpus){return {...corpus,sections:corpus.sections.map(s=>({...s,units:s.units.map(u=>phoneticUnit(corpus.id,u))}))};}

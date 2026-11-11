@@ -1,7 +1,6 @@
 import {boundedQuranPlan,completeQuranRotation,registerLongCompletion,seedLongSurahs,completionReview,QURAN_PLAN_VERSION} from './quran-plan.js';
-import {versePartsHTML} from './matn-format.js';
-import {matnPhoneticHTML} from './phonetic-view.js';
-import {phoneticCorpus,unitPhonetic} from './transliteration.js';
+import {matnTextHTML, versePartsHTML} from './matn-format.js';
+import {phoneticCorpus,phoneticUnit,unitPhonetic} from './transliteration.js';
 import {createProgramWizard} from './program-wizard.js';
 import { createOfflineStore } from "./offline-cache.js";
 import { ReviewPageCursor, readingPlace } from "./review-continuation.js";
@@ -15,7 +14,6 @@ import {
   spokenVerseUnit,
   verseReadingHTML,
   verseBookPosition,
-  verseBookViewportTop,
   mountVerseBook,
   QuranWordAudio,
 } from "./quran-reading.js";
@@ -354,8 +352,6 @@ function render() {
   const oldBookPosition = verseBookPosition(verseScroll);
   const verseTop = verseScroll?.scrollTop || 0;
   const verseKey = verseScroll?.querySelector('[data-verse-key]')?.dataset.verseKey;
-  const legends = 'details.tajweed-legend, .tajweed-legend details, details.phonetic-legend';
-  const legendOpen = [...root.querySelectorAll(legends)].map(el => el.open);
   const formScroll = [
     ...root.querySelectorAll(
       ".selection-choices,.qa-choice-list",
@@ -403,7 +399,6 @@ function render() {
   );
   layoutObserver?.disconnect();
   root.innerHTML = `<div class="shell ${view === "reader" ? "reading" : bookStudy ? "book-study" : ""}">${view !== "reader" && !bookStudy ? masthead() : ""}${view === "home" ? home() : view === "library" ? library() : view === "programs" ? programs() : view === "new" ? newProgram() : view === "books" ? books.render() : view === "reader" ? readerView() : settings()}</div>${view !== "reader" && !bookStudy ? nav() : ""}`;
-  root.querySelectorAll(legends).forEach((el, i) => { el.open = Boolean(legendOpen[i]); });
   const nextVerseScroll = root.querySelector('.quran-verse-scroll');
   if (nextVerseScroll && !session) {
     mountVerseBook(nextVerseScroll, {
@@ -515,7 +510,8 @@ function fitMatn() {
     current.style.maxHeight = available + "px";
     let size = 28;
     current.style.fontSize = size + "px";
-    while (size > 18 && current.scrollHeight > available) {
+    const floor = lyrics.classList.contains("phonetic-matn") ? 15 : 18;
+    while (size > floor && current.scrollHeight > available) {
       size--;
       current.style.fontSize = size + "px";
     }
@@ -526,7 +522,7 @@ function fitMatn() {
   const track = page.querySelector(".lyric-track");
   let size = 30;
   page.style.fontSize = size + "px";
-  const floor = track ? 22 : 17;
+  const floor = page.closest(".phonetic-reading") ? 15 : track ? 22 : 17;
   while (
     size > floor &&
     (track
@@ -931,7 +927,6 @@ function readerView() {
                 size: db.settings.quranTextSize,
                 wordPlaying: playingWord,
                 printedPlaying: playingPrintedWord,
-                showHint: !db.settings.wordHintSeen,
                 tajweed: tajweedData,
               },
               esc,
@@ -991,7 +986,6 @@ function readerView() {
       sheet: reader.sheet,
       sheets: sheets.length,
       textHTML:
-        matnPhonetic()?sheet.units.map(u=>matnPhoneticHTML(corpus,u,hidden)).join(""):
         simpleLearning() && !printedLearning()
           ? session.phase === "listen"
             ? `<div class="lyric-track">${sheet.units.map((u) => learningText(u, hidden)).join("")}</div>`
@@ -1018,14 +1012,20 @@ function readerView() {
   );
 }
 function learningText(u, hidden) {
+  if (matnPhonetic()) u = phoneticUnit(currentCorpus(), u);
   const text = hidden
     ? '<span class="learning-veil" aria-label="Texte caché"></span>'
     : u.parts && u.text === u.parts.join(" ")
-      ? versePartsHTML(u.parts,esc)
-      : esc(u.text);
+      ? versePartsHTML(u.parts,esc,u.phonetic)
+      : matnTextHTML(u.text,esc,u.phonetic);
   return `<div class="learning-unit"><p>${text}</p></div>`;
 }
 function verseHTML(corpus, u, hidden) {
+  if (matnPhonetic()) {
+    const reading = phoneticUnit(corpus, u);
+    const text = reading.parts.length === 2 ? versePartsHTML(reading.parts, esc, true) : matnTextHTML(reading.text, esc, true);
+    return `<div class="verse ${hidden ? 'matn-hidden' : ''}" data-verse="${esc(u.id)}"><p lang="fr" dir="ltr">${text}</p></div>`;
+  }
   if(corpus!=="quran"&&u.parts?.length===2)return `<div class="verse ${hidden?'matn-hidden':''}" data-verse="${esc(u.id)}"><p>${versePartsHTML(u.parts,esc)}</p></div>`;
   const ref = phonetics[u.id],
     active = voice.text;
@@ -1159,7 +1159,7 @@ function settings() {
           })
           .join("")
       : '<p class="muted">Une étoile dans la lecture, et tu retrouves ton passage ici.</p>'
-  }</section><details class="card"><summary>À propos du suivi vocal</summary><p class="small muted">Sakina.me · version 1.26.2</p><p>Zipformer Quran v3.1 · Quran Lab, via ReciteQuran et le moteur local sherpa-onnx. Reconnaissance des phonèmes en Hafs. Retours expérimentaux, sans validation automatique du tajwid.</p><p>Application personnelle et gratuite. Aucune publicité, aucun compte, aucun envoi d’audio.</p><a href="vendor/LICENSE-ReciteQuran.txt">Conditions ReciteQuran</a> · <a href="THIRD_PARTY_NOTICES.txt">Sources et licences</a></details>`;
+  }</section><details class="card"><summary>À propos du suivi vocal</summary><p class="small muted">Sakina.me · version 1.26.3</p><p>Zipformer Quran v3.1 · Quran Lab, via ReciteQuran et le moteur local sherpa-onnx. Reconnaissance des phonèmes en Hafs. Retours expérimentaux, sans validation automatique du tajwid.</p><p>Application personnelle et gratuite. Aucune publicité, aucun compte, aucun envoi d’audio.</p><a href="vendor/LICENSE-ReciteQuran.txt">Conditions ReciteQuran</a> · <a href="THIRD_PARTY_NOTICES.txt">Sources et licences</a></details>`;
 }
 async function resetVoice() {
   errorStreak.reset();
@@ -1671,9 +1671,9 @@ async function listen(units = currentUnits(), extra = false, options = {}) {
           if (scroller && card) {
             const bounds = scroller.getBoundingClientRect(),
               rect = card.getBoundingClientRect();
-            if (rect.top < verseBookViewportTop(scroller) || rect.bottom > bounds.bottom)
+            if (rect.top < bounds.top || rect.bottom > bounds.bottom)
               scroller.scrollTo({
-                top: scroller.scrollTop + rect.top - verseBookViewportTop(scroller) - 8,
+                top: scroller.scrollTop + rect.top - bounds.top - 8,
                 behavior: matchMedia("(prefers-reduced-motion: reduce)").matches
                   ? "instant"
                   : "smooth",
@@ -1936,10 +1936,6 @@ async function action(el) {
         );
         return;
       }
-      if (!db.settings.wordHintSeen) {
-        db.settings.wordHintSeen = true;
-        stateSave();
-      }
       await listen(units, false, {
         reciter: "minshawi",
         repeats: 1,
@@ -2066,6 +2062,16 @@ async function action(el) {
     listenRun++;
   if (a === "reader-menu") {
     document.querySelector("#reader-menu").showModal();
+    return;
+  }
+  if (a === "reader-guide") {
+    root.querySelector('#reader-menu')?.close();
+    root.querySelector('#reader-guide')?.showModal();
+    return;
+  }
+  if (a === "close-reader-guide") {
+    root.querySelector('#reader-guide')?.close();
+    root.querySelector('[data-action="reader-menu"]')?.focus();
     return;
   }
   if (a === "close-menu") {
@@ -2500,7 +2506,7 @@ async function offlineStore() {
       return createOfflineStore({
         manifest: await response.json(),
         baseURL: location.href,
-        shellCache: "sakina-recite-v38",
+        shellCache: "sakina-recite-v39",
       });
     })().catch((error) => {
       offlineStorePromise = null;

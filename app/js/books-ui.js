@@ -1,3 +1,4 @@
+import { calendarDay, createDeadline, deadlineSummary, formatDeadline, requireDeadlineCapacity } from './deadline-plan.js';
 import {
   programmeGroups,
   dailyCandidates,
@@ -17,6 +18,7 @@ import { speedDialog, speedTrigger } from "./speed-control.js";
 import {
   emptyStudy,
   createBookProgram,
+  selectQuestions,
   bookPlan,
   canResumeScheduledCard,
   previewGrades,
@@ -188,6 +190,8 @@ export function createBooksUI(host) {
     draft = {
       name: p?.name || data.title,
       newPerDay: p?.newPerDay ?? 5,
+      goalMode: p?.goal ? "date" : "regular",
+      goalDate: p?.goal?.date || "",
       mode: p?.selection?.mode || "all",
       chapters: p?.selection?.chapters || [],
       ids: p?.selection?.ids || [],
@@ -204,6 +208,7 @@ export function createBooksUI(host) {
     if (!form) return;
     draft.name = form.elements.name.value;
     draft.newPerDay = Number(form.elements.newPerDay.value);
+    if (form.elements.goalDate) draft.goalDate = form.elements.goalDate.value;
     draft.retention = 0.9;
     draft.chapters = [
       ...form.querySelectorAll('[name="chapters"]:checked'),
@@ -238,7 +243,7 @@ export function createBooksUI(host) {
         const ed = editions.get(p.editionId);
         if (!ed) return "";
         const plan = bookPlan(state(), p, ed);
-        return `<article class="card qa-program"><span class="tag">QUESTIONS-RÉPONSES · ${ed.language.toUpperCase()}${p.archived ? " · Archivé" : p.paused ? " · En pause" : ""}</span><h3>${E(p.name)}</h3><p class="small muted">${questionSummary(plan.due.length, plan.fresh.length, plan.waitingUntil)}</p><div class="progress" role="progressbar" aria-label="Questions commencées" aria-valuenow="${plan.started}" aria-valuemin="0" aria-valuemax="${plan.total}"><i style="width:${(100 * plan.started) / Math.max(1, plan.total)}%"></i></div><div class="spread"><small class="muted">${plan.started} / ${plan.total} questions</small>${p.archived ? "<small>Archivé</small>" : B(canResume(p) ? "Reprendre" : "Commencer", "start", "primary compact", `data-id="${E(p.id)}"`)}${B("Révision libre", "practice", "secondary compact", `data-id="${E(p.id)}"`)}${B("Gérer", "edit", "text", `data-id="${E(p.id)}"`)}</div></article>`;
+        return `<article class="card qa-program"><span class="tag">QUESTIONS-RÉPONSES · ${ed.language.toUpperCase()}${p.archived ? " · Archivé" : p.paused ? " · En pause" : ""}</span><h3>${E(p.name)}</h3><p class="small muted">${questionSummary(plan.due.length, plan.fresh.length, plan.waitingUntil)}</p>${p.goal ? `<p class="small muted">Objectif le ${E(formatDeadline(p.goal.date))}</p>` : ""}<div class="progress" role="progressbar" aria-label="Questions commencées" aria-valuenow="${plan.started}" aria-valuemin="0" aria-valuemax="${plan.total}"><i style="width:${(100 * plan.started) / Math.max(1, plan.total)}%"></i></div><div class="spread"><small class="muted">${plan.started} / ${plan.total} questions</small>${p.archived ? "<small>Archivé</small>" : B(canResume(p) ? "Reprendre" : "Commencer", "start", "primary compact", `data-id="${E(p.id)}"`)}${B("Révision libre", "practice", "secondary compact", `data-id="${E(p.id)}"`)}${B("Gérer", "edit", "text", `data-id="${E(p.id)}"`)}</div></article>`;
       })
       .join("");
   }
@@ -298,6 +303,25 @@ export function createBooksUI(host) {
         "",
       )}</div>${selection === "all" ? '<p class="small muted">Toutes les questions, dans l’ordre du livre.</p>' : selection === "chapters" ? `<div class="qa-choice-list">${ed.chapters.map((ch) => `<label style="${ch.parentId ? "padding-left:16px" : ""}"><input type="checkbox" name="chapters" value="${E(ch.id)}" ${draft.chapters.includes(ch.id) ? "checked" : ""}>${E(ch.title)}</label>`).join("")}</div>` : selection === "individual" ? `<div class="qa-choice-list">${ed.questions.map((q) => `<label><input type="checkbox" name="questions" value="${E(q.id)}" ${draft.ids.includes(q.id) ? "checked" : ""}>${q.number}${q.occurrence > 1 ? " (2e)" : ""} · ${E(q.searchText.slice(0, 90))}</label>`).join("")}</div>` : `<div class="qa-ranges">${draft.ranges.map((r, i) => `<div class="qa-range"><label>De la question<input data-from type="number" min="1" max="${Math.max(...ed.questions.map((q) => q.number))}" value="${r.from}" required></label><label>À la question<input data-to type="number" min="1" max="${Math.max(...ed.questions.map((q) => q.number))}" value="${r.to}" required></label>${draft.ranges.length > 1 ? B("×", "remove-range", "text", `data-index="${i}" aria-label="Retirer cette plage"`) : ""}</div>`).join("")}</div>${B("+ Ajouter une plage", "add-range", "text")}`}<label>Nouvelles questions par jour<input name="newPerDay" type="number" min="0" max="1000" value="${draft.newPerDay}" required></label><p class="small muted">Les révisions dues passent avant les nouvelles questions.</p><button class="btn primary block" type="submit">${editing ? "Enregistrer" : "Créer et commencer"}</button>${B("Réviser librement cette sélection", "practice-draft", "secondary block")}${editing ? `<div class="qa-manage-actions">${B(state().programs.find((p) => p.id === editing)?.paused ? "Réactiver" : "Mettre en pause", "pause", "secondary", `data-id="${E(editing)}"`)}${B("Archiver", "archive", "secondary", `data-id="${E(editing)}"`)}${B("Supprimer ce programme", "delete", "danger", `data-id="${E(editing)}"`)}</div>` : ""}</form>${B("Retour aux livres", "list", "text")}`;
   }
+  function draftGoal() {
+    if (draft.goalMode !== 'date') return undefined;
+    const previous = state().programs.find(p => p.id === editing);
+    const ids = selectQuestions(edition, draft);
+    if (previous?.goal?.date === draft.goalDate && ids.join() === previous.questionIds.join()) return previous.goal;
+    const now = new Date();
+    const plan = bookPlan(state(), { questionIds: ids, newPerDay: 1000 }, edition, now);
+    const goal = createDeadline(draft.goalDate, calendarDay(now), plan.total - plan.started + plan.introducedToday);
+    requireDeadlineCapacity(goal, 1000);
+    return goal;
+  }
+  function goalControl() {
+    let detail = '';
+    if (draft.goalDate) try {
+      const goal = draftGoal();
+      detail = deadlineSummary(goal, goal.count, 'question', 1000);
+    } catch (error) { detail = error.message; }
+    return `<label>Date de l’examen ou de l’objectif<input type="date" name="goalDate" value="${E(draft.goalDate)}"></label>${detail ? `<p class="guide-note" role="status">${E(detail)}</p>` : ''}`;
+  }
   function form(){
     const html=legacyForm(),doc=new DOMParser().parseFromString(html,'text/html'),form=doc.querySelector('form');
     form.querySelector('.qa-book-title')?.remove();
@@ -306,8 +330,18 @@ export function createBooksUI(host) {
 
     const submit=stages[2].querySelector('[type="submit"]');if(submit)submit.textContent=editing?'Enregistrer':'Lancer mon premier entraînement';
     const select=stages[0].querySelector('.qa-modes');if(select)select.classList.add('guide-scope');
-    const heading=['Que veux-tu apprendre dans ce livre ?','Combien de nouvelles questions par jour ?','Ton programme est prêt.'][wizardStep];
-    const pace=stages[1].querySelector('[name="newPerDay"]');if(pace)pace.parentElement.insertAdjacentHTML('beforebegin',`<div class="guide-pace-options">${[3,5,10].map(n=>B(`${n} questions par jour`,'wizard-pace',`guide-choice ${n===draft.newPerDay?'selected':''}`,`data-value="${n}"`)).join('')}</div>`);
+    const heading=['Que veux-tu apprendre dans ce livre ?',draft.goalMode==='date'?'Quand veux-tu être prêt ?':'Combien de nouvelles questions par jour ?','Ton programme est prêt.'][wizardStep];
+    const pace=stages[1].querySelector('[name="newPerDay"]');
+    if (pace) {
+      const switches = [['regular','Rythme régulier'],['date','Date d’objectif']].map(([mode,label]) =>
+        B(label, 'wizard-goal', draft.goalMode===mode?'selected':'', `data-value="${mode}" aria-pressed="${draft.goalMode===mode}"`),
+      ).join('');
+      const timing = draft.goalMode==='date' ? goalControl() : `<div class="guide-pace-options">${[3,5,10].map(n=>B(`${n} questions par jour`,'wizard-pace',`guide-choice ${n===draft.newPerDay?'selected':''}`,`data-value="${n}"`)).join('')}</div>`;
+      pace.parentElement.insertAdjacentHTML('beforebegin', `<div class="seg deadline-modes" aria-label="Planification">${switches}</div>${timing}`);
+      pace.parentElement.hidden = draft.goalMode==='date';
+    }
+    if (draft.goalMode==='date' && draft.goalDate)
+      stages[2].insertAdjacentHTML('afterbegin', `<p class="guide-note">Objectif le ${E(formatDeadline(draft.goalDate))}</p>`);
     form.className='guide-book-form';form.innerHTML=`<header class="guide-book-progress"><span>${wizardStep+1} sur 3</span><div class="progress"><i style="width:${100*(wizardStep+1)/3}%"></i></div></header><h2>${heading}</h2><p class="small muted">${E(edition.title)}</p>`;
     stages.forEach((section,i)=>{section.hidden=i!==wizardStep;section.className='guide-book-stage';form.append(section);});
     if(wizardStep<2)form.insertAdjacentHTML('beforeend',B('Continuer →','wizard-next','primary block guide-sticky'));
@@ -496,7 +530,8 @@ export function createBooksUI(host) {
     }
     e.preventDefault();
     const a = el.dataset.bookAction;
-    if(a==='wizard-next'||a==='wizard-back'){capture();if(a==='wizard-next'&&draft.mode==='individual'&&!draft.ids.length){host.toast('Choisis au moins une question.');return;}if(a==='wizard-next'&&draft.mode==='chapters'&&!draft.chapters.length){host.toast('Choisis au moins un chapitre.');return;}wizardStep=Math.max(0,Math.min(2,wizardStep+(a==='wizard-next'?1:-1)));refresh();return;}
+    if(a==='wizard-next'||a==='wizard-back'){capture();if(a==='wizard-next'&&wizardStep===1)try{draftGoal();}catch(error){host.toast(error.message);return;}if(a==='wizard-next'&&draft.mode==='individual'&&!draft.ids.length){host.toast('Choisis au moins une question.');return;}if(a==='wizard-next'&&draft.mode==='chapters'&&!draft.chapters.length){host.toast('Choisis au moins un chapitre.');return;}wizardStep=Math.max(0,Math.min(2,wizardStep+(a==='wizard-next'?1:-1)));refresh();return;}
+    if(a==='wizard-goal'){capture();draft.goalMode=el.dataset.value;refresh();return;}
     if(a==='wizard-pace'){capture();draft.newPerDay=Number(el.dataset.value);refresh();return;}
     try {
       if (a !== "audio") stopAudio();
@@ -754,7 +789,7 @@ export function createBooksUI(host) {
   async function submit(e) {
     if (e.target.id !== "book-program-form") return;
     e.preventDefault();
-    if(wizardStep<2){capture();wizardStep++;refresh();return;}
+    if(wizardStep<2){e.target.querySelector('[data-book-action="wizard-next"]')?.click();return;}
     if (saving) return;
     saving = true;
     const submitButton = e.target.querySelector("[type=submit]");
@@ -777,6 +812,7 @@ export function createBooksUI(host) {
           id: editing || undefined,
           name: draft.name,
           newPerDay: draft.newPerDay,
+          goal: draftGoal(),
           selection: {
             mode: draft.mode,
             chapters: draft.chapters,
@@ -856,6 +892,9 @@ export function createBooksUI(host) {
       }
     });
     root.addEventListener("submit", submit);
+    root.addEventListener("change", (event) => {
+      if (event.target.matches('#book-program-form [name="goalDate"]')) { capture(); refresh(); }
+    });
     root.addEventListener("scroll", updateScrollHints, true);
     root.addEventListener("keydown", (e) => {
       if (

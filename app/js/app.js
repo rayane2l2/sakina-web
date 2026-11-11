@@ -1,3 +1,5 @@
+import { deadlineQuota, formatDeadline, memoDeadlineWork } from './deadline-plan.js';
+import { corpusName } from './matn-corpus.js';
 import {boundedQuranPlan,completeQuranRotation,registerLongCompletion,seedLongSurahs,completionReview,QURAN_PLAN_VERSION} from './quran-plan.js';
 import {matnTextHTML, matnUnitTextHTML, versePartsHTML} from './matn-format.js';
 import {phoneticCorpus,phoneticUnit,unitPhonetic} from './transliteration.js';
@@ -232,12 +234,18 @@ function prog(p) {
   const date = day(),
     cached = planCache.get(p.memo);
   if (cached?.date === date) return cached.value;
-  const value = firstDayPlan(
-    p.corpus === "quran"
-      ? boundedQuranPlan(p.memo,date,M,{sections:corpora.quran.sections,resolve:id=>findUnit("quran",id)})
-      : dailyMatnPlan(p.memo, date, M),p,date);
+  const value = programmePlan(p, date);
   planCache.set(p.memo, { date, value });
   return value;
+}
+function programmePlan(p, date) {
+  const plan = firstDayPlan(p.corpus === "quran"
+    ? boundedQuranPlan(p.memo, date, M, { sections: corpora.quran.sections, resolve: id => findUnit("quran", id) })
+    : dailyMatnPlan(p.memo, date, M), p, date);
+  if (!p.goal) return plan;
+  const { pending, learnedToday } = memoDeadlineWork(p.memo, date);
+  const quota = deadlineQuota(p.goal, date, pending.length, learnedToday);
+  return quota === null ? plan : { ...plan, fresh: pending.slice(0, quota) };
 }
 const totalRevision = (p) => {
   const x = prog(p);
@@ -662,7 +670,7 @@ function readingResume() {
     label:
       place.corpus === "quran"
         ? `${ch.name} · page ${place.page || ch.units[index].page}`
-        : `${c.name} · ${ch.name}`,
+        : `${corpusName(c)} · ${ch.name}`,
   };
 }
 function readingResumeButton() {
@@ -700,7 +708,7 @@ function home() {
       ? `data-book-action="start" data-id="${esc(p.id)}"`
       : `data-action="start" data-id="${esc(p.id)}"`;
   const main = first
-    ? `<section class="card today-card"><span class="tag">MA SÉANCE · ${first.kind === "book" ? "QUESTIONS-RÉPONSES" : esc(corpora[first.programme.corpus].name)}</span><h2>${esc(first.name)}</h2><p class="small muted">${first.kind === "book" ? questionSummary(first.review, first.fresh, first.waitingUntil) : `${esc(dailySummary(first.programme))}`}</p><button class="btn primary block" ${actionAttrs(first)}>${first.resume ? "Reprendre ma séance" : "Commencer ma séance"} ${icon("arrow")}</button></section>`
+    ? `<section class="card today-card"><span class="tag">MA SÉANCE · ${first.kind === "book" ? "QUESTIONS-RÉPONSES" : esc(corpusName(corpora[first.programme.corpus]))}</span><h2>${esc(first.name)}</h2><p class="small muted">${first.kind === "book" ? questionSummary(first.review, first.fresh, first.waitingUntil) : `${esc(dailySummary(first.programme))}`}</p><button class="btn primary block" ${actionAttrs(first)}>${first.resume ? "Reprendre ma séance" : "Commencer ma séance"} ${icon("arrow")}</button></section>`
     : `<section class="card today-card"><h2>${db.programs.length || books.hasPrograms() ? "C’est tout pour aujourd’hui." : "Que veux-tu faire ?"}</h2>${db.programs.length || books.hasPrograms() ? button("Mes programmes", "nav", "secondary block", 'data-view="programs"') : `<div class="first-choices">${button("Lire le Coran", "read-quran", "primary block")}${button("Apprendre et réviser", "nav", "secondary block", 'data-view="programs"')}</div>`}</section>`;
   return `<h1 class="home-heading">Prends un instant.<br>Il est pour toi.</h1>${main}${readingResumeButton()}${offlineReady ? "" : `<section class="card offline-invite"><span class="tag">SUR CET APPAREIL</span><h2>Préparation hors connexion</h2><p class="small muted">Téléchargement automatique. Les fichiers déjà présents sont conservés.</p>${button(offlineBusy ? "Préparation en cours…" : "Reprendre la préparation", "offline", "secondary block", offlineBusy ? "disabled" : "")}<p id="offline-progress" class="small muted" role="status">${offlineBusy ? `${offlineDownloaded} téléchargés · ${offlineReused} conservés` : "La préparation reprend là où elle s’est arrêtée."}</p></section>`}<div class="daily-other">${candidates
     .slice(1)
@@ -712,7 +720,7 @@ function home() {
 }
 function programCard(p) {
   const x = prog(p);
-  return `<article class="card program"><span class="tag">${esc(corpora[p.corpus].name)}${p.archived ? " · Archivé" : p.paused ? " · En pause" : ""}</span><h3>${esc(p.name)}</h3>${progress(p)}<div class="program-meta"><span>${esc(dailySummary(p))}</span></div><div class="spread">${!p.archived ? button("Continuer " + icon("arrow"), "start", "primary compact", `data-id="${esc(p.id)}"`) : ""}${button("Gérer", "edit", "text", `data-id="${esc(p.id)}"`)}</div></article>`;
+  return `<article class="card program"><span class="tag">${esc(corpusName(corpora[p.corpus]))}${p.archived ? " · Archivé" : p.paused ? " · En pause" : ""}</span><h3>${esc(p.name)}</h3>${progress(p)}<div class="program-meta"><span>${esc(dailySummary(p))}</span>${p.goal ? `<span>Objectif le ${esc(formatDeadline(p.goal.date))}</span>` : ""}</div><div class="spread">${!p.archived ? button("Continuer " + icon("arrow"), "start", "primary compact", `data-id="${esc(p.id)}"`) : ""}${button("Gérer", "edit", "text", `data-id="${esc(p.id)}"`)}</div></article>`;
 }
 function library() {
   const c = corpora[libraryCorpus];
@@ -721,7 +729,7 @@ function library() {
   )
     .map((id) =>
       button(
-        corpora[id].name,
+        esc(corpusName(corpora[id])),
         "corpus",
         libraryCorpus === id ? "selected" : "",
         `data-corpus="${id}"`,
@@ -729,7 +737,7 @@ function library() {
     )
     .join(
       "",
-    )}</div><label class="search">${icon("book")}<input id="search" type="search" placeholder="Rechercher une sourate, un matan, un livre…" value="${esc(search)}"></label>${libraryCorpus !== "quran" ? button("Écouter " + esc(c.name) + " en entier", "listen-entire", "secondary block", `data-corpus="${libraryCorpus}"`) : ""}${c.reviewStatus === "needs_review" ? '<p class="small muted">Texte importé · relecture à terminer.</p>' : ""}${libraryCorpus === "quran" ? `<div class="page-jump"><label for="page-number">Mushaf · 604 pages</label><div><input type="number" id="page-number" min="1" max="604" value="${reader.page || 1}" aria-label="Numéro de page">${button("Ouvrir la page", "jump-page", "secondary compact")}</div></div>` : ""}<div id="section-list">${libraryResults()}</div>`;
+    )}</div><label class="search">${icon("book")}<input id="search" type="search" placeholder="Rechercher une sourate, un matan, un livre…" value="${esc(search)}"></label>${libraryCorpus !== "quran" ? button("Écouter " + esc(corpusName(c)) + " en entier", "listen-entire", "secondary block", `data-corpus="${libraryCorpus}"`) : ""}${c.reviewStatus === "needs_review" ? '<p class="small muted">Texte importé · relecture à terminer.</p>' : ""}${libraryCorpus === "quran" ? `<div class="page-jump"><label for="page-number">Mushaf · 604 pages</label><div><input type="number" id="page-number" min="1" max="604" value="${reader.page || 1}" aria-label="Numéro de page">${button("Ouvrir la page", "jump-page", "secondary compact")}</div></div>` : ""}<div id="section-list">${libraryResults()}</div>`;
 }
 function libraryResults() {
   if (!search.trim()) return sectionRows(corpora[libraryCorpus]);
@@ -738,7 +746,7 @@ function libraryResults() {
       .map((c) => {
         const rows = sectionRows(c, true);
         return rows
-          ? `<h2 class="section-title">${esc(c.name)}</h2>${rows}`
+          ? `<h2 class="section-title">${esc(corpusName(c))}</h2>${rows}`
           : "";
       })
       .join("") + books.searchResults(search);
@@ -750,7 +758,7 @@ function sectionRows(c, empty = false) {
   return (
     c.sections
       .filter((s) =>
-        normalized(s.name + " " + s.ar + " " + s.id).includes(
+        normalized(corpusName(c) + " " + s.name + " " + s.ar + " " + s.id).includes(
           normalized(search),
         ),
       )
@@ -833,7 +841,7 @@ function applyPrior(p, form) {
   };
 }
 let programWizard;
-function guide(){return programWizard??=createProgramWizard({corpora,index:pageIndex,M,resolve:findUnit,today:day,refresh:render,onExit:()=>{view="programs";render();},onBooks:()=>{view="books";render();},onSave:(p,start)=>{if(start&&p.corpus==="quran")p.memo=seedLongSurahs(p.memo,corpora.quran.sections,id=>findUnit("quran",id),day());if(db.programs.some(x=>x.id===p.id))db.programs=db.programs.map(x=>x.id===p.id?p:x);else db.programs.push(p);stateSave();editing=null;if(start)void startProgram(p.id).catch(e=>toast(e.message));else{view="programs";render();}toast("Programme enregistré.");}});}
+function guide(){return programWizard??=createProgramWizard({corpora,index:pageIndex,M,resolve:findUnit,today:day,refresh:render,onExit:()=>{view="programs";render();},onBooks:()=>{view="books";render();},onSave:(p,start)=>{if(start&&p.corpus==="quran")p.memo=seedLongSurahs(p.memo,corpora.quran.sections,id=>findUnit("quran",id),day());if(db.programs.some(x=>x.id===p.id)){const previous=db.programs.find(x=>x.id===p.id);if(JSON.stringify(previous.goal)!==JSON.stringify(p.goal))forgetLesson(db,p.id);db.programs=db.programs.map(x=>x.id===p.id?p:x);}else db.programs.push(p);stateSave();editing=null;if(start)void startProgram(p.id).catch(e=>toast(e.message));else{view="programs";render();}toast("Programme enregistré.");}});}
 function newProgram() {
   return guide().render()+(editing?`<div class="qa-manage-actions">${button("Mettre en pause / réactiver","pause-program","secondary",`data-id="${editing}"`)}${button("Archiver","archive-program","secondary",`data-id="${editing}"`)}${button("Supprimer ce programme","delete-program","danger",`data-id="${editing}"`)}</div>`:"");
 }
@@ -847,7 +855,7 @@ function legacyNewProgram() {
       ? `<label>Texte<select name="corpus">${Object.values(corpora)
           .map(
             (x) =>
-              `<option value="${x.id}" ${x.id === draft.corpus ? "selected" : ""}>${x.name}</option>`,
+              `<option value="${x.id}" ${x.id === draft.corpus ? "selected" : ""}>${esc(corpusName(x))}</option>`,
           )
           .join("")}</select></label>${selectionFields(c.sections, draft, esc)}`
       : ""
@@ -936,7 +944,7 @@ function readerView() {
             )
           : "",
       swipeHint: false,
-      title: session?.current.dailyMatn ? corpora[corpus].name : s.name,
+      title: session?.current.dailyMatn ? corpusName(corpora[corpus]) : s.name,
       subtitle: session?.current.dailyMatn
         ? "Tout l’acquis · récitation quotidienne"
         : corpus === "quran"
@@ -1094,10 +1102,7 @@ function feedbackHTML() {
 function reminderItems(at = new Date()) {
   const date = localDay(at);
   const memo = db.programs.map((p) => {
-    const x = firstDayPlan(
-      p.corpus === "quran"
-        ? boundedQuranPlan(p.memo,date,M,{sections:corpora.quran.sections,resolve:id=>findUnit("quran",id)})
-        : dailyMatnPlan(p.memo, date, M),p,date);
+    const x = programmePlan(p, date);
     const ids = [...x.recent, ...x.revision].flatMap((b) => b.ids || []),
       id = ids[0] || x.fresh[0];
     const name =
@@ -1163,7 +1168,7 @@ function settings() {
           })
           .join("")
       : '<p class="muted">Une étoile dans la lecture, et tu retrouves ton passage ici.</p>'
-  }</section><details class="card"><summary>À propos du suivi vocal</summary><p class="small muted">Sakina.me · version 1.27</p><p>Zipformer Quran v3.1 · Quran Lab, via ReciteQuran et le moteur local sherpa-onnx. Reconnaissance des phonèmes en Hafs. Retours expérimentaux, sans validation automatique du tajwid.</p><p>Application personnelle et gratuite. Aucune publicité, aucun compte, aucun envoi d’audio.</p><a href="vendor/LICENSE-ReciteQuran.txt">Conditions ReciteQuran</a> · <a href="THIRD_PARTY_NOTICES.txt">Sources et licences</a></details>`;
+  }</section><details class="card"><summary>À propos du suivi vocal</summary><p class="small muted">Sakina.me · version 1.28</p><p>Zipformer Quran v3.1 · Quran Lab, via ReciteQuran et le moteur local sherpa-onnx. Reconnaissance des phonèmes en Hafs. Retours expérimentaux, sans validation automatique du tajwid.</p><p>Application personnelle et gratuite. Aucune publicité, aucun compte, aucun envoi d’audio.</p><a href="vendor/LICENSE-ReciteQuran.txt">Conditions ReciteQuran</a> · <a href="THIRD_PARTY_NOTICES.txt">Sources et licences</a></details>`;
 }
 async function resetVoice() {
   errorStreak.reset();
@@ -2510,7 +2515,7 @@ async function offlineStore() {
       return createOfflineStore({
         manifest: await response.json(),
         baseURL: location.href,
-        shellCache: "sakina-recite-v40",
+        shellCache: "sakina-recite-v41",
       });
     })().catch((error) => {
       offlineStorePromise = null;

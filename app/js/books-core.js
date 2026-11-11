@@ -7,6 +7,7 @@ import {
   StrategyMode,
   GenSeedStrategyWithCardId,
 } from "../vendor/ts-fsrs-5.2.3.mjs";
+import {calendarDay, deadlineQuota, reviewStart, validDeadline} from './deadline-plan.js';
 export const ALGORITHM = Object.freeze({
   library: "ts-fsrs",
   version: "5.2.3",
@@ -48,7 +49,7 @@ export function selectQuestions(
 }
 export function createBookProgram(
   edition,
-  { id, name, selection, newPerDay = 5 } = {},
+  { id, name, selection, newPerDay = 5, goal } = {},
 ) {
   if (
     !Number.isInteger(Number(newPerDay)) ||
@@ -65,6 +66,7 @@ export function createBookProgram(
     questionIds: selectQuestions(edition, selection),
     newPerDay: Number(newPerDay),
     selection: selection || { mode: "all" },
+    ...(validDeadline(goal) ? { goal } : {}),
   };
 }
 export function bookPlan(study, program, edition, now = new Date()) {
@@ -92,9 +94,26 @@ export function bookPlan(study, program, edition, now = new Date()) {
         new Date(study.cards[cardKey(edition.id, a)].due) -
         new Date(study.cards[cardKey(edition.id, b)].due),
     );
-  const fresh = ids
-    .filter((id) => !study.cards[cardKey(edition.id, id)])
-    .slice(0, Math.max(0, program.newPerDay - introduced.size));
+  const remaining = ids.filter((id) => !study.cards[cardKey(edition.id, id)]);
+  const today = calendarDay(now);
+  const quota = deadlineQuota(program.goal, today, remaining.length, introduced.size, 1000);
+  const fresh = remaining.slice(0, quota ?? Math.max(0, program.newPerDay - introduced.size));
+  const goal = program.goal;
+  if (validDeadline(goal) && goal.reviewDays && today >= reviewStart(goal) && today <= goal.date) {
+    const start = reviewStart(goal);
+    const reviewedToday = new Set(study.logs.filter((item) =>
+      allowed.has(item.key) && item.log.state !== State.New && calendarDay(item.log.review) === today,
+    ).map((item) => item.key)).size;
+    const dueSet = new Set(due);
+    const extra = ids.filter((id) => {
+      const card = study.cards[cardKey(edition.id, id)];
+      return card?.state === State.Review && card.last_review &&
+        calendarDay(card.last_review) < start && !dueSet.has(id);
+    });
+    const days = Math.max(1, Math.round((Date.parse(goal.date) - Date.parse(today)) / 86400000));
+    const count = Math.max(0, Math.ceil((extra.length + reviewedToday + due.length) / days) - reviewedToday - due.length);
+    due.push(...extra.slice(0, count));
+  }
   const future = ids
     .map((id) => study.cards[cardKey(edition.id, id)]?.due)
     .filter(Boolean)
@@ -118,6 +137,7 @@ export function bookPlan(study, program, edition, now = new Date()) {
     next: due[0] || fresh[0] || null,
     nextDue: future[0]?.toISOString() || null,
     total: ids.length,
+    introducedToday: introduced.size,
     started: ids.filter((id) => study.cards[cardKey(edition.id, id)]).length,
   };
 }
@@ -214,6 +234,7 @@ export function validateBookStudy(s) {
       typeof p.name !== "string" ||
       !Array.isArray(p.questionIds) ||
       !p.questionIds.every((id) => typeof id === "string") ||
+      (p.goal !== undefined && !validDeadline(p.goal)) ||
       !Number.isInteger(p.newPerDay) ||
       p.newPerDay < 0 ||
       p.newPerDay > 1000

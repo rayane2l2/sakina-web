@@ -1,8 +1,9 @@
 import {cleanMatnText} from './matn-format.js';
 export const MATN_SPECS = Object.freeze([
-  {id:'mukhtasar-al-harari',name:'Moukhtassar al-Harari',file:'mukhtasar-al-harari',unit:'passage',audioRevision:'0de7a6279891'},
-  {id:'nawawi-ar', name:'الأربعون النووية', file:'nawawi-ar', unit:'hadith'},
+  {id:'mukhtasar-al-harari',name:'Le Moukhtasar de ʿAbdallah al-Harari',shortTitleAr:'مختصر عبد الله الهرري',file:'mukhtasar-al-harari',unit:'passage',audioRevision:'0de7a6279891'},
+  {id:'nawawi-ar', name:'Les 40 hadiths de l’imam An-Nawawi', file:'nawawi-ar', unit:'hadith'},
 ]);
+export const corpusName = (corpus) => [corpus.name, corpus.shortTitleAr || corpus.titleAr].filter(Boolean).join(' · ');
 export const supportedCorpus=id=>id==='quran'||id==='ibn-ashir'||MATN_SPECS.some(c=>c.id===id);
 export function buildImportedMatn(source,spec){
  let n=0;

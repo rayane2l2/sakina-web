@@ -63,7 +63,8 @@ export async function loadData() {
     quran: { id: "quran", name: "Le Coran", unit: "verset", sections: quran },
     "ibn-ashir": {
       id: "ibn-ashir",
-      name: "Matn Ibn Ashir",
+      name: "Matn d’Ibn ʿĀshir",
+      titleAr: "متن ابن عاشر",
       unit: "vers",
       sections: matn,
     },

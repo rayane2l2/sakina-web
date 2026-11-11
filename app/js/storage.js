@@ -4,6 +4,7 @@ import { validateBookStudy } from "./books-core.js";
 import { supportedCorpus } from "./matn-corpus.js";
 import { normalizeModel } from "./model-choice.js";
 import { normalizeSpeed } from "./playback-speed.js";
+import { validDeadline } from "./deadline-plan.js";
 const KEY = "sakina-recite.v1";
 const empty = () => ({
   version: 1,
@@ -67,6 +68,7 @@ export function validateBackup(s) {
       typeof p.id !== "string" ||
       typeof p.name !== "string" ||
       !supportedCorpus(p.corpus) ||
+      (p.goal !== undefined && !validDeadline(p.goal)) ||
       !p.memo ||
       !Array.isArray(p.memo.units) ||
       !p.memo.items ||

@@ -178,3 +178,7 @@ body:has(.program-guide){overflow:hidden}.shell:has(.program-guide){height:calc(
 .hadith-page { overflow-y: auto; overscroll-behavior: contain; justify-content: safe center; }
 .hadith-page .lyric-track { min-height: min-content; }
 .hadith-page .matn-hidden p { visibility: hidden; }
+
+.deadline-modes { margin: 0 0 16px; }
+.deadline-modes .btn { flex: 1; min-width: 0; white-space: normal; }
+.deadline-modes .btn.selected { background: #2859c4; color: #fff; }

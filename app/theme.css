@@ -45,3 +45,93 @@ body:has(.program-guide){overflow:hidden}.shell:has(.program-guide){height:calc(
 
 /* Distinct Arabic phonemes in a stronger, scholarly Latin reading face. */
 .phonetic-line,.verse-phonetic{font-family:Georgia,"Times New Roman",serif!important;font-weight:700!important;font-size:19px!important;line-height:2.15!important}.phonetic-word{font-weight:700!important}.phonetic-ayah-mark{position:relative;display:inline-grid;width:31px;height:34px;border:0;background:none;margin:0 4px;vertical-align:middle}.phonetic-ayah-mark img{position:absolute;width:100%;height:100%;inset:0;object-fit:contain}.phonetic-ayah-mark>span{position:relative;font:800 10px/1 Nunito,system-ui,sans-serif;color:#33425b}.phonetic-legend{position:sticky;top:0;z-index:3;background:#f8faff;border:1px solid #e1e8f5;border-radius:13px;padding:10px 12px;margin-bottom:14px;text-align:left;font:700 12px/1.5 Nunito,system-ui,sans-serif}.phonetic-legend summary{cursor:pointer;min-height:26px}.phonetic-legend>div{max-height:45dvh;overflow:auto;padding-top:10px}.phonetic-legend>div>details{padding:8px 0;border-top:1px solid #e5ebf5}.phonetic-legend>div>details>summary{display:flex;justify-content:space-between;gap:12px}.phonetic-legend b{font-family:Georgia,serif;font-size:19px}.phonetic-legend bdi{font-family:Amiri,serif;font-size:22px}.phonetic-legend p{font:400 13px/1.7 Nunito,system-ui,sans-serif!important;direction:ltr!important;text-align:left!important;color:#4f607b;margin:9px 0!important}.quran-verse-scroll .phonetic-legend{position:static}
+
+.quran-book-reading {
+  background: #f3eeea;
+  color: #30272a;
+}
+.quran-book-sheet {
+  --book-rose: #893d4d;
+  --book-rule: #d7b6b7;
+  max-width: 640px;
+  margin: auto;
+  padding: 16px clamp(10px, 3vw, 28px);
+  border: 3px double var(--book-rule);
+  border-radius: 6px 20px 20px 6px;
+  background: #fffaf3;
+}
+.quran-book-title {
+  margin: 8px 0 12px;
+  padding: 9px;
+  border: 3px double var(--book-rule);
+  border-radius: 30px;
+  text-align: center;
+  color: var(--book-rose);
+  font: italic 700 clamp(21px, 5vw, 30px)/1.25 Georgia, serif;
+}
+.quran-book-title span,
+.quran-book-basmala > span {
+  display: block;
+  font: 400 30px/1.6 Amiri, serif;
+}
+.quran-book-basmala {
+  padding: 5px 0 12px;
+  text-align: center;
+}
+.quran-book-sheet .quran-verse-block {
+  position: relative;
+  padding: 8px 0 10px;
+  border: 0;
+  border-top: 1px solid var(--book-rule);
+}
+.quran-book-sheet .quran-verse-block:last-child {
+  border-bottom: 1px solid var(--book-rule);
+}
+.quran-book-sheet .quran-verse-block > p[lang="ar"] {
+  margin: 0 38px 0;
+  text-align: center;
+  color: var(--book-rose);
+  line-height: 1.75;
+}
+.quran-book-sheet .verse-listen {
+  position: absolute;
+  top: 8px;
+  left: 0;
+  width: 36px;
+  justify-content: center;
+  padding: 0;
+}
+.quran-book-sheet .verse-phonetic {
+  padding: 0 2px !important;
+  text-align: center !important;
+  color: #30272a;
+  font: italic 700 clamp(17px, 4vw, 22px)/1.55 Georgia, serif !important;
+  overflow-wrap: anywhere;
+}
+.book-ain {
+  font-family: Amiri, serif;
+}
+.quran-book-marker {
+  display: inline-grid;
+  place-items: center;
+  width: 29px;
+  height: 32px;
+  vertical-align: middle;
+  background: url(assets/ayah-ring.svg) center / contain no-repeat;
+  font: 700 10px/1 Nunito, sans-serif;
+}
+.phonetic-legend dl {
+  margin: 4px 0 0;
+  max-height: 42dvh;
+  overflow: auto;
+}
+.phonetic-key-row {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  align-items: center;
+  padding: 4px 0;
+  border-top: 1px solid #e5ebf5;
+}
+.phonetic-key-row dt { font: 700 17px/1.4 Georgia, serif; }
+.phonetic-key-row dd { margin: 0; }
+.phonetic-key-row dd[lang="ar"] { font: 400 23px/1.25 Amiri, serif; }

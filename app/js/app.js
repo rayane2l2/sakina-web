@@ -1,6 +1,6 @@
 import {boundedQuranPlan,completeQuranRotation,registerLongCompletion,seedLongSurahs,completionReview,QURAN_PLAN_VERSION} from './quran-plan.js';
 import {versePartsHTML} from './matn-format.js';
-import {mountPhoneticMushaf,matnPhoneticHTML} from './phonetic-view.js';
+import {matnPhoneticHTML} from './phonetic-view.js';
 import {phoneticCorpus,unitPhonetic} from './transliteration.js';
 import {createProgramWizard} from './program-wizard.js';
 import { createOfflineStore } from "./offline-cache.js";
@@ -346,7 +346,7 @@ function readerSheets() {
 let layoutObserver;
 function render() {
   const previousMatnScroll=root.querySelector(".matn-library-scroll");if(previousMatnScroll&&!session)reader.matnScroll=previousMatnScroll.scrollTop;
-  const previousMushaf=root.querySelector("#printed-mushaf,#phonetic-mushaf"),mushafTop=previousMushaf?.parentElement.scrollTop,mushafPage=previousMushaf?.dataset.currentPage;
+  const previousMushaf=root.querySelector("#printed-mushaf"),mushafTop=previousMushaf?.parentElement.scrollTop,mushafPage=previousMushaf?.dataset.currentPage;
   const verseScroll=root.querySelector('.quran-verse-scroll'),verseTop=verseScroll?.scrollTop||0,verseKey=verseScroll?.querySelector('[data-verse-key]')?.dataset.verseKey;
   const tajweedOpen=[...root.querySelectorAll('details.tajweed-legend, .tajweed-legend details')].map(el=>el.open);
   const formScroll = [
@@ -453,7 +453,6 @@ function render() {
         return;
       }
       if (verseMode()) return;
-      if(phoneticMode()){const sheets=readerSheets(),page=sheets[Math.min(reader.sheet||0,sheets.length-1)].page;mountPhoneticMushaf({index:pageIndex,units:session?currentUnits():corpora.quran.sections.flatMap(s=>s.units),hidden:isHidden(),pageNumbers:session?sheets.map(s=>s.page):Array.from({length:604},(_,i)=>i+1),initialPage:page,scrollTop:Number(mushafPage)===page?mushafTop:null,statuses:statusesFor(session?currentUnits():corpora.quran.sections.flatMap(s=>s.units)),revealedAyahs:reader.revealedAyahs||[],revealRecognized:recognitionAvailable(currentCorpus(),session?.current),learning:learningAppearance(),onPage:n=>{const host=root.querySelector("#phonetic-mushaf");if(host)host.dataset.currentPage=n;if(session){const i=sheets.findIndex(s=>s.page===n);if(i>=0)reader.sheet=i;}else if(!recognition.active){reader.page=n;const word=pageIndex[n-1]?.lines[0]?.words[0];if(word)reader.sid=String(word.s);}}});return;}
       const sheets = readerSheets(),
         sheet = sheets[Math.min(reader.sheet || 0, sheets.length - 1)];
       mountMushaf({
@@ -517,7 +516,6 @@ function fitMatn() {
     page.style.fontSize = size + "px";
   }
 }
-function phoneticMode(){return currentCorpus()==='quran'&&quranReadingMode(db.settings.quranReadingMode)==='phonetic';}
 function matnPhonetic(){return currentCorpus()!=='quran'&&db.settings.matnReadingMode==='phonetic';}
 function verseMode() {
   return (
@@ -880,7 +878,6 @@ function readerView() {
     {
       corpus,
       readingMode: quranReadingMode(db.settings.quranReadingMode),
-      phoneticMode: phoneticMode(),
       matnPhonetic: matnPhonetic(),
       phoneticAvailable: corpus!=="quran"&&units.every(u=>Boolean(unitPhonetic(corpus,u))),
       verseMode: verseMode(),
@@ -1127,7 +1124,7 @@ function settings() {
           })
           .join("")
       : '<p class="muted">Une étoile dans la lecture, et tu retrouves ton passage ici.</p>'
-  }</section><details class="card"><summary>À propos du suivi vocal</summary><p class="small muted">Sakina.me · version 1.26</p><p>Zipformer Quran v3.1 · Quran Lab, via ReciteQuran et le moteur local sherpa-onnx. Reconnaissance des phonèmes en Hafs. Retours expérimentaux, sans validation automatique du tajwid.</p><p>Application personnelle et gratuite. Aucune publicité, aucun compte, aucun envoi d’audio.</p><a href="vendor/LICENSE-ReciteQuran.txt">Conditions ReciteQuran</a> · <a href="THIRD_PARTY_NOTICES.txt">Sources et licences</a></details>`;
+  }</section><details class="card"><summary>À propos du suivi vocal</summary><p class="small muted">Sakina.me · version 1.26.1</p><p>Zipformer Quran v3.1 · Quran Lab, via ReciteQuran et le moteur local sherpa-onnx. Reconnaissance des phonèmes en Hafs. Retours expérimentaux, sans validation automatique du tajwid.</p><p>Application personnelle et gratuite. Aucune publicité, aucun compte, aucun envoi d’audio.</p><a href="vendor/LICENSE-ReciteQuran.txt">Conditions ReciteQuran</a> · <a href="THIRD_PARTY_NOTICES.txt">Sources et licences</a></details>`;
 }
 async function resetVoice() {
   errorStreak.reset();
@@ -1334,7 +1331,7 @@ function updateVoiceDOM() {
           : playingWord) === `${el.dataset.id}:${el.dataset.position}`,
       ),
     );
-  if (verseMode()||phoneticMode()) {
+  if (verseMode()) {
     const statuses = new Map();
     let at = 0;
     for (const unit of currentUnits())
@@ -2472,7 +2469,7 @@ async function offlineStore() {
       return createOfflineStore({
         manifest: await response.json(),
         baseURL: location.href,
-        shellCache: "sakina-recite-v36",
+        shellCache: "sakina-recite-v37",
       });
     })().catch((error) => {
       offlineStorePromise = null;

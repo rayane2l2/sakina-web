@@ -18,7 +18,7 @@ export async function loadData() {
       "phonemes",
       "page-index",
       "tajweed",
-      "transliterations",
+      "transliterations-book",
       "matn-continuous",
       ...MATN_SPECS.map((s) => s.file),
     ].map(async (name) => {

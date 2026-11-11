@@ -8,7 +8,7 @@ import {
 } from "./quran-audio-sync.js";
 import { tajweedWord, tajweedLegend } from "./tajweed.js";
 export const quranReadingMode = (value) =>
-  ["verses","phonetic"].includes(value) ? value : "mushaf";
+  value === "verses" || value === "phonetic" ? "verses" : "mushaf";
 export const quranTextSize = (value) =>
   Math.max(28, Math.min(56, Number(value) || 40));
 const spoken = (text) => /[\u0621-\u064a\u0671]/u.test(text);
@@ -54,11 +54,15 @@ export function verseReadingHTML(
   escape,
 ) {
   const e = escape;
-  return `<div class="quran-verse-scroll" tabindex="0" aria-label="Lecture du Coran, verset par verset" style="--quran-text-size:${quranTextSize(size)}px">${tajweed ? tajweedLegend(e) : ""}${phoneticLegend()}${showHint ? '<p class="quran-verse-help">Touche un mot pour l’écouter. ▶ lit le verset.</p>' : ""}${units
+  return `<div class="quran-verse-scroll quran-book-reading" tabindex="0" aria-label="Lecture du Coran en arabe et en phonétique" style="--quran-text-size:${quranTextSize(size)}px">${tajweed ? tajweedLegend(e) : ""}${phoneticLegend()}${showHint ? '<p class="quran-verse-help">Touche un mot pour l’écouter. ▶ lit le verset.</p>' : ""}<div class="quran-book-sheet">${units
     .map((u) => {
       const [sid, n] = u.id.split(":"),
-        name = sections.find((s) => String(s.id) === sid)?.name || sid;
-      return `<article class="quran-verse-block" data-verse-key="${e(u.id)}"><header><span>${e(name)} · verset ${e(n)}</span><button type="button" class="verse-listen" data-action="listen-reading-verse" data-id="${e(u.id)}" aria-label="Écouter le verset ${e(n)} de ${e(name)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></button></header><p dir="rtl" lang="ar">${verseTokens(
+        section = sections.find((s) => String(s.id) === sid),
+        name = section?.name || sid;
+      const chapterHeading = n === "1" && (!u.wordRefs?.length || u.wordRefs[0].w === 1)
+        ? `<div class="quran-book-title"><strong>Sourate ${e(name)}</strong>${section?.ar ? `<span lang="ar" dir="rtl">${e(section.ar)}</span>` : ""}</div>${sid === "1" || sid === "9" ? "" : `<div class="quran-book-basmala"><span lang="ar" dir="rtl">بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ</span>${versePhoneticHTML({id: "1:1"})}</div>`}`
+        : "";
+      return `${chapterHeading}<article class="quran-verse-block" data-verse-key="${e(u.id)}"><button type="button" class="verse-listen" data-action="listen-reading-verse" data-id="${e(u.id)}" aria-label="Écouter le verset ${e(n)} de ${e(name)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></button><p dir="rtl" lang="ar">${verseTokens(
         u,
         resolve(u.id),
       )
@@ -67,11 +71,11 @@ export function verseReadingHTML(
             ? `<button type="button" class="quran-word ${wordPlaying === u.id + ":" + w.position ? "is-speaking" : ""}" data-action="listen-word" data-id="${e(u.id)}" data-position="${w.position}" data-coordinate="${u !== resolve(u.id) && u.wordRefs?.length ? "printed" : "canonical"}" aria-label="Écouter le mot ${e(w.text)}">${tajweedWord(w.text, u.id, w.position, u !== resolve(u.id) && u.wordRefs?.length ? "printed" : "canonical", tajweed, e)}</button>`
             : `<span class="quran-pause">${e(w.text)}</span>`,
         )
-        .join(" ")}</p>${versePhoneticHTML(u)}</article>`;
+        .join(" ")} <span class="quran-book-marker" aria-label="Verset ${e(n)}">${e(n)}</span></p>${versePhoneticHTML(u)}</article>`;
     })
     .join(
       "",
-    )}${pageNavigation ? `<div class="verse-page-navigation"><button class="btn secondary" data-action="previous" ${pageNavigation.first ? "disabled" : ""}>Page précédente</button><button class="btn secondary" data-action="next" ${pageNavigation.last ? "disabled" : ""}>Page suivante</button></div>` : ""}</div>`;
+    )}</div>${pageNavigation ? `<div class="verse-page-navigation"><button class="btn secondary" data-action="previous" ${pageNavigation.first ? "disabled" : ""}>Page précédente</button><button class="btn secondary" data-action="next" ${pageNavigation.last ? "disabled" : ""}>Page suivante</button></div>` : ""}</div>`;
 }
 export class QuranWordAudio {
   constructor(fetcher = (...args) => fetch(...args)) {

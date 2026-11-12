@@ -57,6 +57,7 @@ import {
   restoreLesson,
   confirmedLessonUnits,
   remainingSurahVerses,
+  extraLessonUnits,
 } from "./daily-session.js";
 import { createBooksUI } from "./books-ui.js";
 import {
@@ -688,10 +689,23 @@ function readingResumeButton() {
       )
     : "";
 }
+function savedProgramLesson(program, checkpoint = lessonMemory(db, program.id)) {
+  if (program.corpus === "quran" && checkpoint?.quranPlanVersion !== QURAN_PLAN_VERSION)
+    return null;
+  return restoreLesson(checkpoint, program, day());
+}
+function hasDailyWork(program) {
+  const { fresh, recent, revision } = prog(program);
+  return Boolean(fresh.length || recent.length || revision.length || savedProgramLesson(program));
+}
+function canContinueToday(program) {
+  return !program.paused && !program.archived && !hasDailyWork(program)
+    && program.memo.queue.some(id => !program.memo.items[id]);
+}
 function finishSurahOffer(program) {
   if (program.corpus !== "quran" || program.paused || program.archived || prog(program).fresh.length)
     return null;
-  if (restoreLesson(lessonMemory(db, program.id), program, day())) return null;
+  if (savedProgramLesson(program)) return null;
   return remainingSurahVerses(program.memo, corpora.quran.sections);
 }
 function finishSurahPage() {
@@ -716,7 +730,7 @@ function openFinishSurah(program) {
 function home() {
   const memorisation = db.programs.map((p) => {
     const checkpoint = lessonMemory(db, p.id),
-      resume = Boolean(restoreLesson(checkpoint, p, day())),
+      resume = Boolean(savedProgramLesson(p, checkpoint)),
       x = prog(p);
     return {
       kind: "memo",
@@ -742,7 +756,11 @@ function home() {
     : `<section class="card today-card"><h2>${db.programs.length || books.hasPrograms() ? "C’est tout pour aujourd’hui." : "Que veux-tu faire ?"}</h2>${db.programs.length || books.hasPrograms() ? button("Mes programmes", "nav", "secondary block", 'data-view="programs"') : `<div class="first-choices">${button("Lire le Coran", "read-quran", "primary block")}${button("Apprendre et réviser", "nav", "secondary block", 'data-view="programs"')}</div>`}</section>`;
   const bonus = db.programs.flatMap(program => {
     const offer = finishSurahOffer(program);
-    if (!offer) return [];
+    if (!offer) {
+      if (!canContinueToday(program)) return [];
+      return [`<section class="card"><h2>${esc(program.name)}</h2><p>Séance du jour terminée.</p>
+        ${button("Continuer aujourd’hui", "start-extra-lesson", "secondary block", `data-id="${esc(program.id)}"`)}</section>`];
+    }
     const count = offer.ids.length;
     return [`<section class="card"><h2>Terminer ${esc(offer.surah.name)}</h2>
       <p>${count} verset${count > 1 ? "s" : ""} à apprendre</p>
@@ -757,8 +775,12 @@ function home() {
     .join("")}</div>`;
 }
 function programCard(p) {
-  const x = prog(p);
-  return `<article class="card program"><span class="tag">${esc(corpusName(corpora[p.corpus]))}${p.archived ? " · Archivé" : p.paused ? " · En pause" : ""}</span><h3>${esc(p.name)}</h3>${progress(p)}<div class="program-meta"><span>${esc(dailySummary(p))}</span>${p.goal ? `<span>Objectif le ${esc(formatDeadline(p.goal.date))}</span>` : ""}</div><div class="spread">${!p.archived ? button("Continuer " + icon("arrow"), "start", "primary compact", `data-id="${esc(p.id)}"`) : ""}${button("Gérer", "edit", "text", `data-id="${esc(p.id)}"`)}</div></article>`;
+  const extra = canContinueToday(p);
+  const canStart = !p.archived && hasDailyWork(p);
+  const start = extra
+    ? button("Continuer aujourd’hui " + icon("arrow"), "start-extra-lesson", "primary compact", `data-id="${esc(p.id)}"`)
+    : canStart ? button("Continuer " + icon("arrow"), "start", "primary compact", `data-id="${esc(p.id)}"`) : "";
+  return `<article class="card program"><span class="tag">${esc(corpusName(corpora[p.corpus]))}${p.archived ? " · Archivé" : p.paused ? " · En pause" : ""}</span><h3>${esc(p.name)}</h3>${progress(p)}<div class="program-meta"><span>${esc(dailySummary(p))}</span>${p.goal ? `<span>Objectif le ${esc(formatDeadline(p.goal.date))}</span>` : ""}</div><div class="spread">${start}${button("Gérer", "edit", "text", `data-id="${esc(p.id)}"`)}</div></article>`;
 }
 function library() {
   const isMatn = libraryCorpus !== "quran" && libraryCorpus !== "books";
@@ -1223,7 +1245,7 @@ function settings() {
           })
           .join("")
       : '<p class="muted">Une étoile dans la lecture, et tu retrouves ton passage ici.</p>'
-  }</section><details class="card"><summary>À propos du suivi vocal</summary><p class="small muted">Sakina.me · version 1.32.2</p><p>Zipformer Quran v3.1 · Quran Lab, via ReciteQuran et le moteur local sherpa-onnx. Reconnaissance des phonèmes en Hafs. Retours expérimentaux, sans validation automatique du tajwid.</p><p>Application personnelle et gratuite. Aucune publicité, aucun compte, aucun envoi d’audio.</p><a href="vendor/LICENSE-ReciteQuran.txt">Conditions ReciteQuran</a> · <a href="THIRD_PARTY_NOTICES.txt">Sources et licences</a></details>`;
+  }</section><details class="card"><summary>À propos du suivi vocal</summary><p class="small muted">Sakina.me · version 1.32.3</p><p>Zipformer Quran v3.1 · Quran Lab, via ReciteQuran et le moteur local sherpa-onnx. Reconnaissance des phonèmes en Hafs. Retours expérimentaux, sans validation automatique du tajwid.</p><p>Application personnelle et gratuite. Aucune publicité, aucun compte, aucun envoi d’audio.</p><a href="vendor/LICENSE-ReciteQuran.txt">Conditions ReciteQuran</a> · <a href="THIRD_PARTY_NOTICES.txt">Sources et licences</a></details>`;
 }
 async function resetVoice() {
   errorStreak.reset();
@@ -1539,12 +1561,12 @@ async function openReader(corpus, sid, index = 0) {
   render();
   window.scrollTo(0, 0);
 }
-async function startProgram(id, finishSurah = false) {
+async function startProgram(id, mode = "daily") {
   const p = db.programs.find((p) => p.id === id);
   if (!p) return;
   const checkpoint = lessonMemory(db, p.id);
-  const restored = p.corpus==="quran"&&checkpoint?.quranPlanVersion!==QURAN_PLAN_VERSION?null:restoreLesson(checkpoint, p, day());
-  if (restored && !finishSurah) {
+  const restored = savedProgramLesson(p, checkpoint);
+  if (restored) {
     stopPlayback();
     await resetVoice();
     session = regroupRemainingReviews(restored, reviewOptions(p));
@@ -1560,13 +1582,14 @@ async function startProgram(id, finishSurah = false) {
     render();
     return;
   }
-  const offer = finishSurah ? finishSurahOffer(p) : null;
-  if (finishSurah ? !offer : p.endedEarlyOn === day()) {
-    toast("Ta séance est terminée pour aujourd’hui.");
-    return;
-  }
-  const fresh = offer?.ids || prog(p).fresh,
-    steps = [],
+  if (mode === "daily" && canContinueToday(p)) mode = "extra";
+  const ending = mode === "ending" ? finishSurahOffer(p) : null;
+  const extra = mode === "extra" && canContinueToday(p);
+  const fresh = ending?.ids || (extra ? extraLessonUnits(p, day(), M) : mode === "daily" ? prog(p).fresh : []);
+  const includeReviews = mode === "daily";
+  const finishSurah = Boolean(ending);
+  const extraLesson = Boolean(extra);
+  const steps = [],
     targets = learningTargets(
       p.corpus,
       fresh.map((id) => findUnit(p.corpus, id)),
@@ -1594,7 +1617,7 @@ async function startProgram(id, finishSurah = false) {
       test: step.kind === "test",
     });
   }
-  if (!finishSurah) steps.push(...plannedReviews(p));
+  if (includeReviews) steps.push(...plannedReviews(p));
   steps.splice(
     0,
     steps.length,
@@ -1616,6 +1639,7 @@ async function startProgram(id, finishSurah = false) {
     targets: byId,
     portionIds: fresh,
     finishSurah,
+    extraLesson,
     steps,
     index: 0,
     current: steps[0],
@@ -2237,7 +2261,13 @@ async function action(el) {
     return;
   }
   if (a === "start-surah-ending") {
-    await startProgram(el.dataset.id, true);
+    await startProgram(el.dataset.id, "ending");
+    return;
+  }
+  if (a === "start-extra-lesson") {
+    const program = db.programs.find(p => p.id === el.dataset.id);
+    if (program && finishSurahOffer(program)) openFinishSurah(program);
+    else await startProgram(el.dataset.id, "extra");
     return;
   }
   if (a === "start") await startProgram(el.dataset.id);

@@ -1,3 +1,4 @@
+import { deadlineQuota, memoDeadlineWork } from './deadline-plan.js';
 import {QURAN_PLAN_VERSION} from './quran-plan.js';
 // A saved checkpoint never validates knowledge and never resumes a microphone.
 export function orderedLessonSteps(reviews, learning) {
@@ -17,6 +18,7 @@ export function lessonCheckpoint(session, reader, date) {
     targets: session.targets,
     portionIds: session.portionIds,
     finishSurah: Boolean(session.finishSurah),
+    extraLesson: Boolean(session.extraLesson),
     listened: session.listened,
     listenTarget: session.listenTarget,
     phase: session.phase,
@@ -32,7 +34,7 @@ export function restoreLesson(checkpoint, program, date) {
     !checkpoint ||
     !program ||
     checkpoint.date !== date ||
-    (program.endedEarlyOn === date && !checkpoint.finishSurah) ||
+    (program.endedEarlyOn === date && !checkpoint.finishSurah && !checkpoint.extraLesson) ||
     checkpoint.programId !== program.id ||
     checkpoint.memoLogLength !== program.memo.log.length ||
     !Array.isArray(checkpoint.steps) ||
@@ -60,6 +62,7 @@ export function restoreLesson(checkpoint, program, date) {
     targets: c.targets || {},
     portionIds: c.portionIds || [],
     finishSurah: Boolean(c.finishSurah),
+    extraLesson: Boolean(c.extraLesson),
     listened: Math.max(0, Number(c.listened) || 0),
     listenTarget: Math.max(0, Number(c.listenTarget) || 0),
     phase: c.phase === "recite" ? "recite" : "listen",
@@ -98,4 +101,14 @@ export function remainingSurahVerses(memo, sections) {
   const ids = surah.units.slice(start).map(unit => unit.id).filter(id => !memo.items[id]);
   const queue = new Set(memo.queue);
   return ids.every(id => queue.has(id)) ? { surah, ids } : null;
+}
+
+export function extraLessonUnits(program, date, memoCore) {
+  const tomorrow = memoCore.addDays(date, 1);
+  if (program.goal) {
+    const { pending, learnedToday } = memoDeadlineWork(program.memo, tomorrow);
+    const quota = deadlineQuota(program.goal, tomorrow, pending.length, learnedToday);
+    if (quota > 0) return pending.slice(0, quota);
+  }
+  return memoCore.nextNew(program.memo, tomorrow);
 }

@@ -31,6 +31,7 @@ export function restoreLesson(checkpoint, program, date) {
     !checkpoint ||
     !program ||
     checkpoint.date !== date ||
+    program.endedEarlyOn === date ||
     checkpoint.programId !== program.id ||
     checkpoint.memoLogLength !== program.memo.log.length ||
     !Array.isArray(checkpoint.steps) ||
@@ -66,3 +67,18 @@ export function restoreLesson(checkpoint, program, date) {
 
 // Only newly created Quran programmes defer imported/old reviews; the knowledge remains intact.
 export function firstDayPlan(plan,programme,date){return programme.corpus==='quran'&&programme.reviewStartsOn&&date<programme.reviewStartsOn?{...plan,recent:[],revision:[]}:plan;}
+
+// Only completed individual recalls count when ending before the final recall.
+export function confirmedLessonUnits(session, resolve) {
+  const confirmed = new Set(session.steps.slice(0, session.index)
+    .filter(step => step.kind === "new" && step.practiceKind === "single")
+    .flatMap(step => step.ids));
+  return session.portionIds.filter(id => {
+    if (session.program.memo.items[id]) return false;
+    if (confirmed.has(id)) return true;
+    if (!id.startsWith("p") || session.program.corpus !== "quran") return false;
+    // Legacy programmes can store printed lines rather than whole verse IDs.
+    const words = resolve(id)?.wordRefs;
+    return Boolean(words?.length && words.every(word => confirmed.has(`${word.s}:${word.a}`)));
+  });
+}

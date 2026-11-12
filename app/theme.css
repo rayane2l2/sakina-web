@@ -182,3 +182,123 @@ body:has(.program-guide){overflow:hidden}.shell:has(.program-guide){height:calc(
 .deadline-modes { margin: 0 0 16px; }
 .deadline-modes .btn { flex: 1; min-width: 0; white-space: normal; }
 .deadline-modes .btn.selected { background: #2859c4; color: #fff; }
+
+/* The labels and thumb position identify the selected display independently of colour. */
+.btn.display-switch{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;min-height:44px;flex-shrink:0;padding:7px 9px;border:1px solid #dbe4f3;border-radius:14px;background:#f3f6fc;color:#52627b;font-size:12px;line-height:1.15;font-weight:750;box-shadow:none;white-space:normal}
+.display-switch .is-current{color:#17253b;font-weight:900}
+.display-switch-track{position:relative;display:block;flex:0 0 44px;width:44px;height:26px;border:1px solid #8c9ab0;border-radius:20px;background:white;transition:background .18s ease}
+.display-switch-track i{position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:white;border:1px solid #8c9ab0;box-shadow:0 1px 3px #17253b42;transition:transform .18s ease}
+.display-switch[aria-checked=true] .display-switch-track{background:#168149;border-color:#168149}
+.display-switch[aria-checked=true] .display-switch-track i{transform:translateX(18px);border-color:white}
+.reader-toolbar .display-switch{flex:1;min-width:0;width:auto}
+.book-edition-choice small{display:block;margin-top:4px}
+.qa-document > .display-switch{margin-bottom:8px}
+@media(prefers-reduced-motion:reduce){.display-switch-track,.display-switch-track i{transition:none}}
+
+/* Keep the setup frame in place. Long selections scroll inside its content. */
+body.wizard-open { overflow: hidden; }
+.wizard-open .shell.wizard-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  min-height: 0;
+  padding: calc(8px + env(safe-area-inset-top)) clamp(12px, 4vw, 24px) calc(8px + env(safe-area-inset-bottom));
+  overflow: hidden;
+}
+.wizard-shell > :is(.program-guide, .guide-book-form) {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  gap: 0;
+}
+.wizard-shell :is(.program-guide > main, .guide-book-main) {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+}
+.wizard-shell .guide-content {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 2px 4px 10px;
+}
+.wizard-shell .guide-content .qa-choice-list { max-height: none; overflow: visible; }
+.wizard-shell .guide-choice { min-height: 54px; margin: 9px 0; padding: 10px 14px; }
+.wizard-shell .guide-choice strong { font-size: clamp(14px, 3.8vw, 17px); }
+.wizard-shell :is(.program-guide h1, .guide-book-main h1) {
+  display: block;
+  flex: none;
+  min-height: 0;
+  font-size: clamp(23px, 5.5vw, 35px);
+  text-align: center;
+  line-height: 1.15;
+  margin: 8px 0 14px;
+}
+.wizard-shell .guide-book-progress { flex: none; padding-block: 4px 10px; }
+.wizard-shell .guide-book-progress .progress { margin-block-start: 0; }
+.wizard-shell .guide-book-footer,
+.wizard-shell .program-guide > footer { flex: none; padding: 10px 0 3px; border-top: 1px solid #edf1f8; }
+.wizard-shell .guide-book-stage { gap: 9px; }
+.wizard-shell .guide-scope .selected { background: #2859c4 !important; color: #fff !important; }
+.wizard-shell .guide-note { margin-block: 9px; padding: 10px; }
+.wizard-shell .guide-measures { margin-bottom: 8px; }
+.wizard-shell .guide-yes-no { margin-block: 4px 8px; }
+.wizard-shell .guide-ready { flex: none; align-self: center; width: 34px; height: 34px; font-size: 20px; }
+.wizard-shell .guide-book-stage input[type=number], .wizard-shell .guide-book-stage input[name=name] { min-height: 44px; }
+.wizard-shell .guide-content > .small:first-child { margin: 0 0 8px; }
+
+.library-categories { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: 14px; }
+.library-categories .btn { min-width: 0; padding-inline: 4px; }
+.library-matn-row .surah-number .icon { width: 19px; height: 19px; }
+.library-matn-row small:empty { display: none; }
+.library-title-row h2 { margin: 4px 0 12px; font-size: 21px; }
+.library-title-row + .btn { margin-bottom: 12px; }
+
+.quran-display {
+  display: grid;
+  grid-template-columns: minmax(0, .85fr) minmax(0, 1.45fr);
+  gap: 3px;
+  min-width: 0;
+  padding: 3px;
+  border: 1px solid #dbe4f3;
+  border-radius: 16px;
+  background: #edf3fe;
+}
+.reader-toolbar .quran-display { flex: 1; }
+.quran-display .btn.quran-display-option {
+  min-width: 0;
+  min-height: 42px;
+  padding: 6px 5px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: #485c7b;
+  white-space: normal;
+  font-size: 12px;
+  line-height: 1.2;
+}
+.quran-display .btn[aria-pressed="true"] {
+  border-color: #cddbf4;
+  background: white;
+  color: #234fae;
+  font-weight: 900;
+}
+@media (max-height: 690px) {
+  .wizard-shell .guide-choice { min-height: 46px; margin-block: 6px; }
+  .wizard-shell .guide-choice small { margin-top: 3px; }
+  .wizard-shell .program-guide > .progress { margin-block: 3px 7px; }
+  .wizard-shell .program-guide label { margin-block: 6px; }
+  .wizard-shell .program-guide input:not([type=checkbox]) { margin-top: 4px; min-height: 44px; padding: 8px; }
+  .wizard-shell .guide-measures button { min-height: 44px; padding-block: 6px; }
+}
+
+@media (max-height: 690px) {
+  .wizard-shell .guide-content { padding-bottom: 7px; }
+  .wizard-shell .guide-book-stage { gap: 4px; }
+  .wizard-shell .guide-pace-options .guide-choice { margin-block: 3px; }
+  .wizard-shell .guide-book-stage input[type=number] { margin-top: 4px; }
+}

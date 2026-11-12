@@ -876,3 +876,12 @@ body {
   color: var(--accent, #2859c4);
   padding-block: 8px;
 }
+
+.qa-document-entry .qa-document-question {
+  border-block-end: 1px solid #dce5f4;
+  padding-block: 6px 12px;
+  margin-block-end: 14px;
+}
+.qa-document-question .qa-text { margin-block-end: 0; font-weight: 800; }
+.qa-document-entry[lang="ar"] .qa-document-question .qa-text,
+.qa-front-content .qa-arabic:lang(ar) { color: #214ba3; }

@@ -55,6 +55,7 @@ import {
   orderedLessonSteps,
   lessonCheckpoint,
   restoreLesson,
+  confirmedLessonUnits,
 } from "./daily-session.js";
 import { createBooksUI } from "./books-ui.js";
 import {
@@ -138,7 +139,7 @@ const esc = (s) =>
       ],
   );
 const icons = {
-  home: '<path d="m3 10 9-7 9 7v10H5V10m4 10v-7h6v7"/>',
+  home: '<path d="M3.5 10.5 12 3l8.5 7.5v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/><path d="M9 20.5v-6a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v6"/>',
   book: '<path d="M12 5C9 3 5 3 2 4v15c4-1 7 0 10 2 3-2 6-3 10-2V4c-3-1-7-1-10 1zm0 0v16"/>',
   layers: '<path d="m12 3 10 6-10 6L2 9zm-9 11 9 5 9-5M3 18l9 5 9-5"/>',
   settings:
@@ -231,14 +232,16 @@ const masthead = () =>
   `<header class="masthead">${button("‹", "back", "app-back", 'aria-label="Retour au menu précédent"')}${brand()}${button(icon("settings"), "nav", "settings-link", 'data-view="settings" aria-label="Mon espace"')}</header>`;
 const planCache = new WeakMap();
 function prog(p) {
-  const date = day(),
-    cached = planCache.get(p.memo);
+  const date = day();
+  if (p.endedEarlyOn === date) return programmePlan(p, date);
+  const cached = planCache.get(p.memo);
   if (cached?.date === date) return cached.value;
   const value = programmePlan(p, date);
   planCache.set(p.memo, { date, value });
   return value;
 }
 function programmePlan(p, date) {
+  if (p.endedEarlyOn === date) return { fresh: [], recent: [], revision: [] };
   const plan = firstDayPlan(p.corpus === "quran"
     ? boundedQuranPlan(p.memo, date, M, { sections: corpora.quran.sections, resolve: id => findUnit("quran", id) })
     : dailyMatnPlan(p.memo, date, M), p, date);
@@ -392,6 +395,8 @@ function render() {
     }
   }
   const bookStudy = view === "books" && books.isStudying();
+  const wizardOpen = view === "new" || (view === "books" && books.isCreating());
+  document.body.classList.toggle("wizard-open", wizardOpen);
   document.body.classList.toggle("book-study-open", bookStudy);
   const speedOpen = document.querySelector("#speed-menu")?.open,
     speedFocused = document.activeElement?.id === "playback-speed";
@@ -405,7 +410,7 @@ function render() {
     view === "reader" && printedLearning(),
   );
   layoutObserver?.disconnect();
-  root.innerHTML = `<div class="shell ${view === "reader" ? "reading" : bookStudy ? "book-study" : ""}">${view !== "reader" && !bookStudy ? masthead() : ""}${view === "home" ? home() : view === "library" ? library() : view === "programs" ? programs() : view === "new" ? newProgram() : view === "books" ? books.render() : view === "reader" ? readerView() : settings()}</div>${view !== "reader" && !bookStudy ? nav() : ""}`;
+  root.innerHTML = `<div class="shell ${view === "reader" ? "reading" : bookStudy ? "book-study" : wizardOpen ? "wizard-shell" : ""}">${view !== "reader" && !bookStudy && !wizardOpen ? masthead() : ""}${view === "home" ? home() : view === "library" ? library() : view === "programs" ? programs() : view === "new" ? newProgram() : view === "books" ? books.render() : view === "reader" ? readerView() : settings()}</div>${view !== "reader" && !bookStudy && !wizardOpen ? nav() : ""}`;
   const nextVerseScroll = root.querySelector('.quran-verse-scroll');
   if (nextVerseScroll && !session) {
     mountVerseBook(nextVerseScroll, {
@@ -634,7 +639,7 @@ function plannedReviews(p) {
         label: "Révision quotidienne · tout l’acquis",
       }));
 }
-function dailySummary(p){const x=prog(p),parts=[];if(plannedReviews(p).length)parts.push('Révisions du jour');if(x.fresh.length)parts.push(freshLabel(p));return parts.join(' · ')||'Ta séance t’attend.';}
+function dailySummary(p){if(p.endedEarlyOn===day())return 'Séance terminée pour aujourd’hui.';const x=prog(p),parts=[];if(plannedReviews(p).length)parts.push('Révisions du jour');if(x.fresh.length)parts.push(freshLabel(p));return parts.join(' · ')||'Ta séance t’attend.';}
 function reviewSummary(p) {
   const groups = plannedReviews(p);
   if (p.corpus !== "quran" && groups.length) {
@@ -722,33 +727,36 @@ function programCard(p) {
   return `<article class="card program"><span class="tag">${esc(corpusName(corpora[p.corpus]))}${p.archived ? " · Archivé" : p.paused ? " · En pause" : ""}</span><h3>${esc(p.name)}</h3>${progress(p)}<div class="program-meta"><span>${esc(dailySummary(p))}</span>${p.goal ? `<span>Objectif le ${esc(formatDeadline(p.goal.date))}</span>` : ""}</div><div class="spread">${!p.archived ? button("Continuer " + icon("arrow"), "start", "primary compact", `data-id="${esc(p.id)}"`) : ""}${button("Gérer", "edit", "text", `data-id="${esc(p.id)}"`)}</div></article>`;
 }
 function library() {
-  const c = corpora[libraryCorpus];
-  return `${title("Bibliothèque")}<div class="seg library-corpora">${Object.keys(
-    corpora,
-  ).concat("books")
-    .map((id) =>
-      button(
-        id === "books" ? "Livres" : esc(corpusName(corpora[id])),
-        "corpus",
-        libraryCorpus === id ? "selected" : "",
-        `data-corpus="${id}"`,
-      ),
-    )
-    .join(
-      "",
-    )}</div><label class="search">${icon("book")}<input id="search" type="search" placeholder="Rechercher une sourate, un matan, un livre…" value="${esc(search)}"></label>${c && libraryCorpus !== "quran" ? button("Écouter " + esc(corpusName(c)) + " en entier", "listen-entire", "secondary block", `data-corpus="${libraryCorpus}"`) : ""}${c?.reviewStatus === "needs_review" ? '<p class="small muted">Texte importé · relecture à terminer.</p>' : ""}${libraryCorpus === "quran" ? `<div class="page-jump"><label for="page-number">Mushaf · 604 pages</label><div><input type="number" id="page-number" min="1" max="604" value="${reader.page || 1}" aria-label="Numéro de page">${button("Ouvrir la page", "jump-page", "secondary compact")}</div></div>` : ""}<div id="section-list">${libraryResults()}</div>`;
+  const isMatn = libraryCorpus !== "quran" && libraryCorpus !== "books";
+  const category = isMatn ? "matns" : libraryCorpus;
+  const corpus = isMatn ? corpora[libraryCorpus] : null;
+  const categories = [["quran", "Coran"], ["matns", "Moutoun"], ["books", "Livres"]];
+  const picker = categories.map(([id, label]) =>
+    button(label, "corpus", category === id ? "selected" : "", `data-corpus="${id}" aria-pressed="${category === id}"`),
+  ).join("");
+  const detail = corpus ? `<div class="library-title-row">${button("‹ Moutoun", "corpus", "text", 'data-corpus="matns"')}<h2>${esc(corpusName(corpus))}</h2></div>
+    ${button("Écouter en entier", "listen-entire", "secondary block", `data-corpus="${corpus.id}"`)}` : "";
+  const page = category === "quran" ? `<div class="page-jump"><label for="page-number">Mushaf · 604 pages</label><div><input type="number" id="page-number" min="1" max="604" value="${reader.page || 1}" aria-label="Numéro de page">${button("Ouvrir la page", "jump-page", "secondary compact")}</div></div>` : "";
+  return `${title("Bibliothèque")}<div class="seg library-categories" role="group" aria-label="Catégories de la bibliothèque">${picker}</div>
+    <label class="search">${icon("book")}<input id="search" type="search" placeholder="Rechercher une sourate, un matan, un livre…" value="${esc(search)}"></label>
+    ${detail}${corpus?.reviewStatus === "needs_review" ? '<p class="small muted">Texte importé · relecture à terminer.</p>' : ""}${page}<div id="section-list">${libraryResults()}</div>`;
 }
 function libraryResults() {
-  if (!search.trim()) return libraryCorpus === "books" ? books.libraryList() : sectionRows(corpora[libraryCorpus]);
-  const results =
-    Object.values(corpora)
-      .map((c) => {
-        const rows = sectionRows(c, true);
-        return rows
-          ? `<h2 class="section-title">${esc(corpusName(c))}</h2>${rows}`
-          : "";
-      })
-      .join("") + books.searchResults(search);
+  if (!search.trim()) {
+    if (libraryCorpus === "books") return books.libraryList();
+    if (libraryCorpus === "matns") {
+      return Object.values(corpora).filter(c => c.id !== "quran").map(c =>
+        `<button type="button" class="section-row library-matn-row" data-action="corpus" data-corpus="${esc(c.id)}">
+          <span class="surah-number">${icon("book")}</span><span><b>${esc(c.name)}</b><small class="ar" lang="ar" dir="rtl">${esc(c.shortTitleAr || c.titleAr || "")}</small></span><span aria-hidden="true">›</span>
+        </button>`,
+      ).join("");
+    }
+    return sectionRows(corpora[libraryCorpus]);
+  }
+  const results = Object.values(corpora).map(c => {
+    const rows = sectionRows(c, true);
+    return rows ? `<h2 class="section-title">${esc(corpusName(c))}</h2>${rows}` : "";
+  }).join("") + books.searchResults(search);
   return results || '<p class="muted">Aucun résultat.</p>';
 }
 function sectionRows(c, empty = false) {
@@ -911,6 +919,19 @@ function currentCorpus() {
 function unitName(unit) {
   return unit[0].toUpperCase() + unit.slice(1);
 }
+function confirmedUnits(lesson) {
+  return confirmedLessonUnits(lesson, id => findUnit(lesson.corpus, id));
+}
+function lessonExitSummary(lesson) {
+  const ids = confirmedUnits(lesson);
+  if (!ids.length) return "Tu pourras reprendre les passages restants demain.";
+  const count = ids.length;
+  const unit = corpora[lesson.corpus].unit;
+  const label = unit + (count > 1 && unit !== "vers" ? "s" : "");
+  if (lesson.corpus === "quran" && ids.some(id => id.startsWith("p")))
+    return "Les passages maîtrisés seront enregistrés. La suite reprendra demain.";
+  return `En terminant maintenant, ${count} ${label} ${count > 1 ? "seront enregistrés" : "sera enregistré"}. La suite reprendra demain.`;
+}
 function readerView() {
   const corpus = currentCorpus(),
     units = currentUnits(),
@@ -950,6 +971,7 @@ function readerView() {
           ? `Page ${sheet.page} · ${session ? (session.current.kind === "review" ? "révision" : "portion du jour") : "lecture libre"}`
           : `${unitName(corpora[corpus].unit)} ${units[0].n}${units.length > 1 ? "–" + units.at(-1).n : ""} · ${s.name}`,
       session: Boolean(session),
+      exitSummary: session ? lessonExitSummary(session) : "",
       mushaf: printedLearning(),
       matnLyrics: !session && corpus !== "quran",
       lyricsHTML:
@@ -1167,7 +1189,7 @@ function settings() {
           })
           .join("")
       : '<p class="muted">Une étoile dans la lecture, et tu retrouves ton passage ici.</p>'
-  }</section><details class="card"><summary>À propos du suivi vocal</summary><p class="small muted">Sakina.me · version 1.31</p><p>Zipformer Quran v3.1 · Quran Lab, via ReciteQuran et le moteur local sherpa-onnx. Reconnaissance des phonèmes en Hafs. Retours expérimentaux, sans validation automatique du tajwid.</p><p>Application personnelle et gratuite. Aucune publicité, aucun compte, aucun envoi d’audio.</p><a href="vendor/LICENSE-ReciteQuran.txt">Conditions ReciteQuran</a> · <a href="THIRD_PARTY_NOTICES.txt">Sources et licences</a></details>`;
+  }</section><details class="card"><summary>À propos du suivi vocal</summary><p class="small muted">Sakina.me · version 1.32</p><p>Zipformer Quran v3.1 · Quran Lab, via ReciteQuran et le moteur local sherpa-onnx. Reconnaissance des phonèmes en Hafs. Retours expérimentaux, sans validation automatique du tajwid.</p><p>Application personnelle et gratuite. Aucune publicité, aucun compte, aucun envoi d’audio.</p><a href="vendor/LICENSE-ReciteQuran.txt">Conditions ReciteQuran</a> · <a href="THIRD_PARTY_NOTICES.txt">Sources et licences</a></details>`;
 }
 async function resetVoice() {
   errorStreak.reset();
@@ -1486,6 +1508,10 @@ async function openReader(corpus, sid, index = 0) {
 async function startProgram(id) {
   const p = db.programs.find((p) => p.id === id);
   if (!p) return;
+  if (p.endedEarlyOn === day()) {
+    toast("Ta séance est terminée pour aujourd’hui.");
+    return;
+  }
   const checkpoint = lessonMemory(db, p.id);
   const restored = p.corpus==="quran"&&checkpoint?.quranPlanVersion!==QURAN_PLAN_VERSION?null:restoreLesson(checkpoint, p, day());
   if (restored) {
@@ -2194,15 +2220,54 @@ async function action(el) {
       render();
     }
   }
-  if (a === "close-reader") {
-    if (session) rememberLesson(db, lessonCheckpoint(session, reader, day()));
-    stateSave();
+  if (a === "close-reader" && session) {
+    const lesson = session;
     stopPlayback();
     await resetVoice();
-    const returnView = session?.returnView || reader.returnView || "home";
+    if (session !== lesson || view !== "reader") return;
+    render();
+    root.querySelector("#lesson-exit").showModal();
+    return;
+  }
+  if (a === "stay-lesson") {
+    root.querySelector("#lesson-exit").close();
+    return;
+  }
+  if (a === "close-reader" || a === "pause-lesson" || a === "finish-lesson-early") {
+    const lesson = session;
+    if (a !== "close-reader" && !lesson) return;
+    const returnView = lesson?.returnView === "new" ? "programs" : lesson?.returnView || reader.returnView || "home";
+    if (a === "finish-lesson-early") {
+      const date = day(), p = lesson.program;
+      const ids = confirmedUnits(lesson);
+      let memo = p.memo;
+      if (ids.length) {
+        memo = M.learn(memo, ids, date);
+        if (p.corpus === "quran")
+          memo = registerLongCompletion(p.memo, memo, corpora.quran.sections, id => findUnit("quran", id), date);
+      }
+      const updated = { ...p, memo, endedEarlyOn: date };
+      const next = { ...db, programs: db.programs.map(program => program.id === p.id ? updated : program) };
+      forgetLesson(next, p.id);
+      try {
+        save(next);
+      } catch {
+        toast("Sauvegarde impossible. La séance reste ouverte.");
+        return;
+      }
+      db = next;
+      queueReminders();
+    } else if (lesson) {
+      rememberLesson(db, lessonCheckpoint(lesson, reader, day()));
+    }
+    if (a !== "finish-lesson-early") stateSave();
     session = null;
+    stopPlayback();
+    await resetVoice();
     view = returnView;
     render();
+    if (a === "finish-lesson-early") toast("Séance terminée. Ta progression est enregistrée.");
+    return;
   }
   if (a === "next" || a === "previous") {
     const delta = a === "next" ? 1 : -1;

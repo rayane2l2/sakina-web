@@ -1,3 +1,4 @@
+import { displaySwitch } from './phonetic-view.js';
 import { calendarDay, createDeadline, deadlineSummary, formatDeadline, requireDeadlineCapacity } from './deadline-plan.js';
 import {
   programmeGroups,
@@ -46,6 +47,8 @@ export function createBooksUI(host) {
     error = null,
     mode = "list",
     edition = null,
+    displayEdition = null,
+    pickedBook = null,
     draft = null,
     editing = null,
     session = null,
@@ -163,7 +166,10 @@ export function createBooksUI(host) {
       throw Error("Livre invalide.");
     if (data.parallelEditionId) {
       const parallel = await loadEdition(data.parallelEditionId);
-      parallelQuestions.set(data.id, new Map(parallel.questions.map((q) => [q.id, q])));
+      const byId = new Map(parallel.questions.map(q => [q.id, q]));
+      const aligned = data.questions.filter(q => byId.has(q.parallelQuestionId));
+      parallelQuestions.set(data.id, new Map(aligned.map(q => [q.id, byId.get(q.parallelQuestionId)])));
+      parallelQuestions.set(parallel.id, new Map(aligned.map(q => [q.parallelQuestionId, q])));
     }
     editions.set(id, data);
     return data;
@@ -223,13 +229,20 @@ export function createBooksUI(host) {
     }));
     if (!draft.ranges.length) draft.ranges = [{ from: 1, to: 25 }];
   }
-  function frontBlocks(q) {
-    const french = parallelQuestions.get(edition.id)?.get(q.parallelQuestionId);
-    return blocks(q.front) + (french ? `<div class="qa-parallel" lang="fr" dir="ltr">${blocks(french.front)}</div>` : "");
+  function alternateSpec() {
+    const book = catalog?.books.find(b => b.editions.some(e => e.id === edition?.id));
+    return book?.editions.find(e => e.id !== edition.id);
   }
-  function answerBlocks(q) {
-    const french = parallelQuestions.get(edition.id)?.get(q.parallelQuestionId);
-    return blocks(q.back) + (french ? `<details class="qa-parallel" lang="fr" dir="ltr"><summary>Voir la réponse en français</summary>${blocks(french.back)}</details>` : "");
+  function matchingQuestion(q) {
+    if (!displayEdition || displayEdition.id === edition.id) return q;
+    return parallelQuestions.get(edition.id)?.get(q.id);
+  }
+  function languageSwitch() {
+    if (!alternateSpec()) return "";
+    const active = (displayEdition || edition).language === "ar";
+    return displaySwitch(B, {
+      left: "Français", right: "Arabe", active, label: "Afficher en arabe", action: "display-language",
+    });
   }
   function blocks(items) {
     return bookContentHTML(items, (b) => {
@@ -265,35 +278,39 @@ export function createBooksUI(host) {
         : "")
     );
   }
-  function editionChoices(query = "", action = "read-edition") {
-    const norm = (value) => String(value || "").normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
-    return catalog?.books.filter((book) => norm([book.title, ...book.editions.flatMap((e) => [e.title, e.label])].join(" ")).includes(norm(query)))
-      .map((book) => {
-        const editionButton = (entry, text, style) =>
-          B(text, action, style, `data-edition="${E(entry.id)}" aria-label="${E(book.title + ' · ' + entry.label)}"`);
-        if (book.editions.length === 1)
-          return editionButton(book.editions[0], `<strong>${E(book.title)}</strong><span aria-hidden="true">›</span>`, "guide-choice book-edition-choice");
-        const alternateTitle = book.editions.find((entry) => entry.language === "ar")?.title;
-        return `<section class="card book-edition-group"><h2>${E(book.title)}${alternateTitle ? ` <bdi lang="ar">${E(alternateTitle)}</bdi>` : ""}</h2><div class="row">${book.editions.map((entry) => editionButton(entry, E(entry.label), "secondary")).join("")}</div></section>`;
+  function editionChoices(query = "", forProgram = false) {
+    const norm = value => String(value || "").toLocaleLowerCase("fr").normalize("NFD").replace(/\p{Diacritic}/gu, "");
+    return catalog?.books.filter(book => norm([book.title, ...book.editions.flatMap(e => [e.title, e.label])].join(" ")).includes(norm(query)))
+      .map(book => {
+        const primary = book.editions.find(e => e.language === "fr") || book.editions[0];
+        const arabic = book.editions.find(e => e.language === "ar")?.title;
+        return B(`<div><strong>${E(book.title)}</strong>${arabic ? `<small lang="ar" dir="rtl">${E(arabic)}</small>` : ""}</div><span aria-hidden="true">›</span>`,
+          forProgram ? "choose-book" : "read-edition", "guide-choice book-edition-choice",
+          `data-book="${E(book.id)}" data-edition="${E(primary.id)}"`);
       }).join("") || "";
   }
   function bookPicker() {
-    return `<section class="program-guide"><header>${B("‹ Retour", "book-back", "text")}<span>2 sur 5</span></header>
-      <div class="progress" aria-label="Création du programme"><i style="width:40%"></i></div>
-      <main><h1>Quel livre veux-tu apprendre ?</h1>${editionChoices("", "choose-edition") || `<p>${E(error || "Aucun livre disponible.")}</p>`}</main></section>`;
+    const choosingLanguage = mode === "language";
+    const choices = choosingLanguage ? pickedBook.editions.map(entry =>
+      B(`<strong>${E(entry.label)}</strong><span aria-hidden="true">›</span>`, "choose-edition",
+        "guide-choice book-edition-choice", `data-edition="${E(entry.id)}"`)).join("") : editionChoices("", true);
+    const step = choosingLanguage ? 2 : 1;
+    return `<section class="guide-book-form"><header class="guide-book-progress">${B("‹ Retour", "book-back", "text")}<span>${step} sur 5</span><div class="progress"><i style="width:${step * 20}%"></i></div></header>
+      <main class="guide-book-main"><h1>${choosingLanguage ? "Dans quelle langue ?" : "Quel livre veux-tu apprendre ?"}</h1><div class="guide-content">${choosingLanguage ? `<p class="small muted">${E(pickedBook.title)}</p>` : ""}${choices || `<p>${E(error || "Aucun livre disponible.")}</p>`}</div></main></section>`;
   }
   function bookReader() {
-    const chapters = new Map(edition.chapters.map(chapter => [chapter.id, chapter.title]));
+    const shown = displayEdition || edition;
+    const chapters = new Map(shown.chapters.map(chapter => [chapter.id, chapter.title]));
     let chapterId;
-    const content = edition.questions.map((q) => {
+    const content = shown.questions.map((q) => {
       const heading = chapterId !== q.chapterId && chapters.has(q.chapterId)
         ? `<h2>${E(chapters.get(q.chapterId))}</h2>` : "";
       chapterId = q.chapterId;
-      return `${heading}<article class="qa-document-entry" dir="${edition.direction === "rtl" ? "rtl" : "ltr"}">
-        <span class="small muted">Question ${q.number}</span><div class="qa-document-question">${frontBlocks(q)}</div>${answerBlocks(q)}</article>`;
+      return `${heading}<article class="qa-document-entry" lang="${shown.language}" dir="${shown.direction}" data-question="${E(q.id)}">
+        <span class="small muted">Question ${q.number}</span><div class="qa-document-question">${blocks(q.front)}</div><div class="qa-document-answer">${blocks(q.back)}</div></article>`;
     }).join("");
-    return `<section class="qa-document"><header>${B("‹ Retour", "book-back", "text")}<h1>${E(edition.title)}</h1></header>
-      <div class="qa-document-scroll" tabindex="0" aria-label="Lecture continue">${content}</div></section>
+    return `<section class="qa-document"><header>${B("‹ Retour", "book-back", "text")}<h1>${E(shown.title)}</h1></header>
+      ${languageSwitch()}<div class="qa-document-scroll" tabindex="0" aria-label="Lecture continue">${content}</div></section>
       ${speedDialog({ playbackRate: host.state().settings.playbackRate }, speedButton)}`;
   }
   function back() {
@@ -305,10 +322,11 @@ export function createBooksUI(host) {
     }
     stopAudio();
     if (mode === "form" && !editing) {
-      mode = "picker";
+      mode = pickedBook ? "language" : "picker";
       refresh();
       return;
     }
+    if (mode === "language") { mode = "picker"; refresh(); return; }
     if (mode === "picker") { host.returnTo("new"); return; }
     if (mode === "read") { host.returnTo("library"); return; }
     const target = session?.returnTo?.startsWith("view:") ? session.returnTo.slice(5) : "programs";
@@ -379,9 +397,12 @@ export function createBooksUI(host) {
       stages[2].insertAdjacentHTML('afterbegin', `<p class="guide-note">Objectif le ${E(formatDeadline(draft.goalDate))}</p>`);
     const current = wizardStep + (editing ? 1 : 3), total = editing ? 3 : 5;
     form.className = "guide-book-form";
-    form.innerHTML = `<header class="guide-book-progress">${B("‹ Retour", "book-back", "text")}<span>${current} sur ${total}</span><div class="progress"><i style="width:${100 * current / total}%"></i></div></header><h1>${heading}</h1><p class="small muted">${E(edition.title)}</p>`;
-    stages.forEach((section,i)=>{section.hidden=i!==wizardStep;section.className='guide-book-stage';form.append(section);});
-    if(wizardStep<2)form.insertAdjacentHTML('beforeend',B('Continuer →','wizard-next','primary block guide-sticky'));
+    form.innerHTML = `<header class="guide-book-progress">${B("‹ Retour", "book-back", "text")}<span>${current} sur ${total}</span><div class="progress"><i style="width:${100 * current / total}%"></i></div></header><main class="guide-book-main"><h1>${heading}</h1><div class="guide-content"><p class="small muted">${E(edition.title)}</p></div></main><footer class="guide-book-footer"></footer>`;
+    const content = form.querySelector('.guide-content');
+    const footer = form.querySelector('.guide-book-footer');
+    stages.forEach((section,i)=>{section.hidden=i!==wizardStep;section.className='guide-book-stage';content.append(section);});
+    if (wizardStep < 2) footer.innerHTML = B('Continuer →', 'wizard-next', 'primary block');
+    else footer.append(submit);
     return form.outerHTML;
   }
   function prepareCard() {
@@ -413,6 +434,7 @@ export function createBooksUI(host) {
     const returnTo = "view:" + (host.active() ? "programs" : host.currentView());
     await host.beforeStudy();
     edition = await loadEdition(p.editionId);
+    displayEdition = edition;
     const saved = bookMemory(host.state(), p, practice);
     if (canResume(p, practice)) {
       session = { ...saved, preview: null, returnTo };
@@ -502,7 +524,12 @@ export function createBooksUI(host) {
         }
       : edition.questions.find((q) => q.id === session.questionId);
     const face = session.face === "back";
-    return `<header class="qa-study-head">${B("‹", "book-back", "qa-close", 'aria-label="Retour au menu précédent"')}<div><small>${E(edition.title)}</small><h1>${E(p.name)}</h1></div><div class="qa-study-meta"><span>${session.practice ? `${session.practice.passed.length} / ${session.practice.total}` : `${session.completed + 1} / ${Math.max(session.total, session.completed + 1)}`}</span>${session.practice && !session.demo ? B("Mélanger", "practice-shuffle", "qa-shuffle", `aria-label="Mélanger les cartes restantes" ${session.practice.queue.length < 2 ? "disabled" : ""}`) : ""}</div></header><div class="progress qa-study-progress" role="progressbar" aria-label="Progression de la séance de questions"><i style="width:${session.practice ? (100 * session.practice.passed.length) / session.practice.total : Math.min(100, (100 * session.completed) / Math.max(1, session.total))}%"></i></div><section class="qa-flip-card ${face ? "flipped" : ""}" tabindex="0" role="group" aria-label="Carte question ${q.number}. Appuyez sur Entrée pour la retourner."><div class="qa-card-inner"><div class="qa-face qa-front" ${face ? 'inert aria-hidden="true"' : ""}><div class="qa-card-tag"><span>Question ${q.number}${q.occurrence > 1 ? " (2e)" : ""}</span><span>${session.demo ? "Démonstration" : session.practice ? "Révision libre" : state().cards[cardKey(edition.id, q.id)] ? "Révision" : "Apprendre"}</span></div><div class="qa-card-scroll qa-question-content" tabindex="0" role="region" aria-label="Question défilante" dir="${edition.direction}"><div class="qa-front-content">${frontBlocks(q)}</div></div></div><div class="qa-face qa-back" ${!face ? 'inert aria-hidden="true"' : ""}><div class="qa-card-tag"><span>Question ${q.number}</span><span>Réponse</span></div><div class="qa-card-scroll" tabindex="0" role="region" aria-label="Réponse défilante" dir="${edition.direction}">${answerBlocks(q)}</div></div></div></section><footer class="qa-study-footer"><p class="qa-tap-hint" ${face ? "hidden" : ""}>${session.demo ? "Démonstration · aucune réponse enregistrée" : !host.state().settings.bookFlipSeen ? "Touchez la carte pour afficher la réponse." : ""}</p>${session.demo ? B("Passer la démonstration", "skip-demo", "qa-undo") : ""}<div class="qa-ratings ${session.practice ? "qa-practice-ratings" : ""}" ${!face ? "hidden" : ""}>${face ? gradeButtons() : ""}</div>${canUndo() ? B("Annuler", "undo", "qa-undo", 'aria-label="Annuler la dernière réponse"') : ""}</footer>${speedDialog({ playbackRate: host.state().settings.playbackRate }, speedButton)}`;
+    const translated = session.demo ? q : matchingQuestion(q);
+    const shown = session.demo || !translated ? edition : (displayEdition || edition);
+    const visibleQuestion = translated || q;
+    const language = session.demo ? "" : translated ? languageSwitch() :
+      '<p class="small muted qa-study-language-note">Cette carte est disponible dans la langue du programme.</p>';
+    return `<header class="qa-study-head">${B("‹", "book-back", "qa-close", 'aria-label="Retour au menu précédent"')}<div><small>${E(edition.title)}</small><h1>${E(p.name)}</h1></div><div class="qa-study-meta"><span>${session.practice ? `${session.practice.passed.length} / ${session.practice.total}` : `${session.completed + 1} / ${Math.max(session.total, session.completed + 1)}`}</span>${session.practice && !session.demo ? B("Mélanger", "practice-shuffle", "qa-shuffle", `aria-label="Mélanger les cartes restantes" ${session.practice.queue.length < 2 ? "disabled" : ""}`) : ""}</div></header><div class="progress qa-study-progress" role="progressbar" aria-label="Progression de la séance de questions"><i style="width:${session.practice ? (100 * session.practice.passed.length) / session.practice.total : Math.min(100, (100 * session.completed) / Math.max(1, session.total))}%"></i></div>${language}<section class="qa-flip-card ${face ? "flipped" : ""}" tabindex="0" role="group" aria-label="Carte question ${q.number}. Appuyez sur Entrée pour la retourner."><div class="qa-card-inner"><div class="qa-face qa-front" ${face ? 'inert aria-hidden="true"' : ""}><div class="qa-card-tag"><span>Question ${q.number}${q.occurrence > 1 ? " (2e)" : ""}</span><span>${session.demo ? "Démonstration" : session.practice ? "Révision libre" : state().cards[cardKey(edition.id, q.id)] ? "Révision" : "Apprendre"}</span></div><div class="qa-card-scroll qa-question-content" tabindex="0" role="region" aria-label="Question défilante" lang="${shown.language}" dir="${shown.direction}"><div class="qa-front-content">${blocks(visibleQuestion.front)}</div></div></div><div class="qa-face qa-back" ${!face ? 'inert aria-hidden="true"' : ""}><div class="qa-card-tag"><span>Question ${q.number}</span><span>Réponse</span></div><div class="qa-card-scroll" tabindex="0" role="region" aria-label="Réponse défilante" lang="${shown.language}" dir="${shown.direction}">${blocks(visibleQuestion.back)}</div></div></div></section><footer class="qa-study-footer"><p class="qa-tap-hint" ${face ? "hidden" : ""}>${session.demo ? "Démonstration · aucune réponse enregistrée" : !host.state().settings.bookFlipSeen ? "Touchez la carte pour afficher la réponse." : ""}</p>${session.demo ? B("Passer la démonstration", "skip-demo", "qa-undo") : ""}<div class="qa-ratings ${session.practice ? "qa-practice-ratings" : ""}" ${!face ? "hidden" : ""}>${face ? gradeButtons() : ""}</div>${canUndo() ? B("Annuler", "undo", "qa-undo", 'aria-label="Annuler la dernière réponse"') : ""}</footer>${speedDialog({ playbackRate: host.state().settings.playbackRate }, speedButton)}`;
   }
   function render() {
     if (mode === "study") return study();
@@ -557,14 +584,51 @@ export function createBooksUI(host) {
         refresh();
         return;
       }
+      if (a === "choose-book" && mode === "picker") {
+        pickedBook = catalog.books.find(book => book.id === el.dataset.book);
+        if (!pickedBook) return;
+        mode = "language";
+        refresh();
+        return;
+      }
+      if (a === "display-language" && (mode === "read" || mode === "study")) {
+        const spec = alternateSpec();
+        if (!spec) return;
+        el.disabled = true;
+        const shown = displayEdition || edition;
+        const scroller = document.querySelector(".qa-document-scroll");
+        const top = scroller?.getBoundingClientRect().top;
+        const currentId = [...(scroller?.querySelectorAll("[data-question]") || [])]
+          .find(item => item.getBoundingClientRect().bottom > top)?.dataset.question;
+        const origin = edition;
+        const originMode = mode;
+        const next = shown.id === edition.id ? await loadEdition(spec.id) : edition;
+        if (mode !== originMode || edition !== origin) return;
+        if (mode === "study" && !parallelQuestions.get(shown.id)?.has(session.questionId) && next.id !== edition.id) {
+          el.disabled = false;
+          host.toast("Cette carte est disponible dans la langue du programme.");
+          return;
+        }
+        displayEdition = next;
+        const aligned = parallelQuestions.get(shown.id)?.get(currentId)?.id;
+        refresh();
+        if (aligned) {
+          const scroll = document.querySelector(".qa-document-scroll");
+          const entry = scroll?.querySelector(`[data-question="${CSS.escape(aligned)}"]`);
+          if (entry) scroll.scrollTop += entry.getBoundingClientRect().top - scroll.getBoundingClientRect().top;
+        }
+        document.querySelector('[data-book-action="display-language"]')?.focus({preventScroll:true});
+        return;
+      }
       if (a === "read-edition" || a === "choose-edition") {
-        if (a === "choose-edition" && (!host.active() || mode !== "picker")) return;
+        if (a === "choose-edition" && (!host.active() || mode !== "language")) return;
         el.disabled = true;
         await host.beforeStudy();
         const data = await loadEdition(el.dataset.edition);
         if (a === "choose-edition") newDraft(data);
         else {
           edition = data;
+          displayEdition = data;
           session = null;
           mode = "read";
         }
@@ -912,6 +976,7 @@ export function createBooksUI(host) {
       return rows ? '<section class="qa-library-books"><h2 class="section-title">Livres questions-réponses</h2>' + rows + '</section>' : "";
     },
     chooseForProgram: () => {
+      pickedBook = null;
       mode = "picker";
       refresh();
     },
@@ -920,6 +985,7 @@ export function createBooksUI(host) {
     persist: async (study) =>
       saveBookStudy(validateBookStudy(study || emptyStudy())),
     isStudying: () => mode === "study",
+    isCreating: () => ["picker", "language", "form"].includes(mode),
     isNested: () => mode !== "list",
     hasPrograms: () => Boolean(state().programs.length),
     programCards: groupedCards,

@@ -1,6 +1,6 @@
 // Bounded Quran workload: last three acquired lessons + at most one older task.
 const dayMs=86400000,wordKey=w=>`${w.s}:${w.a}:${w.w}`;
-export const QURAN_PLAN_VERSION='bounded-monthly-v1';
+export const QURAN_PLAN_VERSION='bounded-monthly-v2';
 export function nextMonth(date){const [y,m,d]=date.split('-').map(Number),last=new Date(Date.UTC(y,m+1,0)).getUTCDate();return new Date(Date.UTC(y,m,Math.min(d,last))).toISOString().slice(0,10);}
 const addDays=(d,n)=>new Date(Date.parse(d+'T12:00:00Z')+n*dayMs).toISOString().slice(0,10);
 const doneOn=(state,date)=>new Set(state.log.filter(e=>e.date===date&&['learn','review'].includes(e.kind)).flatMap(e=>e.ids||[]));
@@ -16,8 +16,19 @@ export function boundedQuranPlan(state,date,M,{sections,resolve}){
  const recent=new Set(lessons.flat().filter(id=>knownIds.has(id))),active=fresh[0]&&resolve(fresh[0]),activeSid=String(active?.wordRefs?.[0]?.s||active?.id.split(':')[0]||'');
  // Short surahs accumulate their entire acquired prefix, not just three portions.
  for(const g of knownGroups)if(g.pages.length<2&&(g.sid===activeSid||g.ids.some(id=>recent.has(id))))for(const id of g.ids)recent.add(id);
- const candidates=[];if(state.consolidationDate!==date)for(const g of knownGroups){const ids=g.ids.filter(id=>!recent.has(id)&&!done.has(id));if(!ids.length)continue;
-  if(g.complete&&g.pages.length>=2){const latest=g.ids.map(id=>state.items[id].learned||state.items[id].first).sort().at(-1)||date,meta=state.longSurahs?.[g.sid]||{nextWhole:nextMonth(latest)};if(meta.nextWhole<=date){candidates.push({key:'whole:'+g.sid,sid:g.sid,ids:g.ids,wholeLong:true,due:meta.nextWhole,priority:meta.completionPending?0:1});continue;}}
+ const candidates=[];
+ if(state.consolidationDate!==date)for(const g of knownGroups){
+  // A finished long surah leaves the page rotation. Its monthly task includes the entire surah.
+  if(g.complete&&g.pages.length>=2){
+   const latest=g.ids.map(id=>state.items[id].learned||state.items[id].first).sort().at(-1)||date;
+   const meta=state.longSurahs?.[g.sid]||{nextWhole:nextMonth(latest)};
+   if(meta.nextWhole<=date&&!g.ids.every(id=>done.has(id))){
+    candidates.push({key:'whole:'+g.sid,sid:g.sid,ids:g.ids,wholeLong:true,due:meta.nextWhole,priority:meta.completionPending?0:1});
+   }
+   continue;
+  }
+  const ids=g.ids.filter(id=>!recent.has(id)&&!done.has(id));
+  if(!ids.length)continue;
   if(g.pages.length<2){const due=ids.map(id=>state.items[id].due||date).sort()[0];if(due<=date)candidates.push({key:'surah:'+g.sid,sid:g.sid,ids,due,priority:2});}
   else{const pages=new Map();for(const id of ids){const u=resolve(id),page=u.pages?.[0]||u.page;if(!pages.has(page))pages.set(page,[]);pages.get(page).push(id);}for(const [page,pageIds] of pages){const latest=state.log.filter(e=>e.kind==='review'&&e.ids?.some(id=>pageIds.includes(id))).map(e=>e.date).sort().at(-1),learned=pageIds.map(id=>state.items[id].learned||state.items[id].first).sort().at(-1)||date,due=addDays(latest||learned,7);if(due<=date)candidates.push({key:`page:${g.sid}:${page}`,sid:g.sid,ids:pageIds,due,priority:3,page});}}
  }

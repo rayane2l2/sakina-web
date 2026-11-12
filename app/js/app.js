@@ -56,6 +56,7 @@ import {
   lessonCheckpoint,
   restoreLesson,
   confirmedLessonUnits,
+  remainingSurahVerses,
 } from "./daily-session.js";
 import { createBooksUI } from "./books-ui.js";
 import {
@@ -153,6 +154,7 @@ const icon = (name, cls = "") =>
   `<svg class="icon ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name] || icons.book}</svg>`;
 let db = load(),
   view = "home",
+  finishSurahProgramId = null,
   libraryCorpus = "quran",
   search = "",
   reader = {
@@ -409,7 +411,7 @@ function render() {
     view === "reader" && printedLearning(),
   );
   layoutObserver?.disconnect();
-  root.innerHTML = `<div class="shell ${view === "reader" ? "reading" : bookStudy ? "book-study" : wizardOpen ? "wizard-shell" : ""}">${view !== "reader" && !bookStudy && !wizardOpen ? masthead() : ""}${view === "home" ? home() : view === "library" ? library() : view === "programs" ? programs() : view === "new" ? newProgram() : view === "books" ? books.render() : view === "reader" ? readerView() : settings()}</div>${view !== "reader" && !bookStudy && !wizardOpen ? nav() : ""}`;
+  root.innerHTML = `<div class="shell ${view === "reader" ? "reading" : bookStudy ? "book-study" : wizardOpen ? "wizard-shell" : ""}">${view !== "reader" && !bookStudy && !wizardOpen ? masthead() : ""}${view === "home" ? home() : view === "finish-surah" ? finishSurahPage() : view === "library" ? library() : view === "programs" ? programs() : view === "new" ? newProgram() : view === "books" ? books.render() : view === "reader" ? readerView() : settings()}</div>${view !== "reader" && !bookStudy && !wizardOpen ? nav() : ""}`;
   const nextVerseScroll = root.querySelector('.quran-verse-scroll');
   if (nextVerseScroll && !session) {
     mountVerseBook(nextVerseScroll, {
@@ -686,6 +688,31 @@ function readingResumeButton() {
       )
     : "";
 }
+function finishSurahOffer(program) {
+  if (program.corpus !== "quran" || program.paused || program.archived || prog(program).fresh.length)
+    return null;
+  if (restoreLesson(lessonMemory(db, program.id), program, day())) return null;
+  return remainingSurahVerses(program.memo, corpora.quran.sections);
+}
+function finishSurahPage() {
+  const program = db.programs.find(p => p.id === finishSurahProgramId);
+  const offer = program && finishSurahOffer(program);
+  const later = button("Plus tard", "nav", "secondary block", 'data-view="home"');
+  if (!offer) return `${title("Séance terminée")}${later}`;
+  const count = offer.ids.length;
+  return `${title("Terminer la sourate ?")}
+    <section class="card today-card">
+      <h2>${esc(offer.surah.name)}</h2>
+      <p>Il te reste ${count} verset${count > 1 ? "s" : ""} pour terminer cette sourate.</p>
+      ${button(count === 1 ? "Apprendre le dernier verset" : "Apprendre les derniers versets", "start-surah-ending", "primary block", `data-id="${esc(program.id)}"`)}
+    </section>${later}`;
+}
+function openFinishSurah(program) {
+  finishSurahProgramId = program.id;
+  view = "finish-surah";
+  render();
+  window.scrollTo(0, 0);
+}
 function home() {
   const memorisation = db.programs.map((p) => {
     const checkpoint = lessonMemory(db, p.id),
@@ -713,7 +740,15 @@ function home() {
   const main = first
     ? `<section class="card today-card"><span class="tag">MA SÉANCE · ${first.kind === "book" ? "QUESTIONS-RÉPONSES" : esc(corpusName(corpora[first.programme.corpus]))}</span><h2>${esc(first.name)}</h2><p class="small muted">${first.kind === "book" ? questionSummary(first.review, first.fresh, first.waitingUntil) : `${esc(dailySummary(first.programme))}`}</p><button class="btn primary block" ${actionAttrs(first)}>${first.resume ? "Reprendre ma séance" : "Commencer ma séance"} ${icon("arrow")}</button></section>`
     : `<section class="card today-card"><h2>${db.programs.length || books.hasPrograms() ? "C’est tout pour aujourd’hui." : "Que veux-tu faire ?"}</h2>${db.programs.length || books.hasPrograms() ? button("Mes programmes", "nav", "secondary block", 'data-view="programs"') : `<div class="first-choices">${button("Lire le Coran", "read-quran", "primary block")}${button("Apprendre et réviser", "nav", "secondary block", 'data-view="programs"')}</div>`}</section>`;
-  return `<h1 class="home-heading">Prends un instant.<br>Il est pour toi.</h1>${main}${readingResumeButton()}${offlineReady ? "" : `<section class="card offline-invite"><span class="tag">SUR CET APPAREIL</span><h2>Préparation hors connexion</h2><p class="small muted">Téléchargement automatique. Les fichiers déjà présents sont conservés.</p>${button(offlineBusy ? "Préparation en cours…" : "Reprendre la préparation", "offline", "secondary block", offlineBusy ? "disabled" : "")}<p id="offline-progress" class="small muted" role="status">${offlineBusy ? `${offlineDownloaded} téléchargés · ${offlineReused} conservés` : "La préparation reprend là où elle s’est arrêtée."}</p></section>`}<div class="daily-other">${candidates
+  const bonus = db.programs.flatMap(program => {
+    const offer = finishSurahOffer(program);
+    if (!offer) return [];
+    const count = offer.ids.length;
+    return [`<section class="card"><h2>Terminer ${esc(offer.surah.name)}</h2>
+      <p>${count} verset${count > 1 ? "s" : ""} à apprendre</p>
+      ${button("Voir les derniers versets", "offer-surah-ending", "secondary block", `data-id="${esc(program.id)}"`)}</section>`];
+  }).join("");
+  return `<h1 class="home-heading">Prends un instant.<br>Il est pour toi.</h1>${first || !bonus ? main : ""}${bonus}${readingResumeButton()}${offlineReady ? "" : `<section class="card offline-invite"><span class="tag">SUR CET APPAREIL</span><h2>Préparation hors connexion</h2><p class="small muted">Téléchargement automatique. Les fichiers déjà présents sont conservés.</p>${button(offlineBusy ? "Préparation en cours…" : "Reprendre la préparation", "offline", "secondary block", offlineBusy ? "disabled" : "")}<p id="offline-progress" class="small muted" role="status">${offlineBusy ? `${offlineDownloaded} téléchargés · ${offlineReused} conservés` : "La préparation reprend là où elle s’est arrêtée."}</p></section>`}<div class="daily-other">${candidates
     .slice(1)
     .map(
       (p) =>
@@ -1188,7 +1223,7 @@ function settings() {
           })
           .join("")
       : '<p class="muted">Une étoile dans la lecture, et tu retrouves ton passage ici.</p>'
-  }</section><details class="card"><summary>À propos du suivi vocal</summary><p class="small muted">Sakina.me · version 1.32.1</p><p>Zipformer Quran v3.1 · Quran Lab, via ReciteQuran et le moteur local sherpa-onnx. Reconnaissance des phonèmes en Hafs. Retours expérimentaux, sans validation automatique du tajwid.</p><p>Application personnelle et gratuite. Aucune publicité, aucun compte, aucun envoi d’audio.</p><a href="vendor/LICENSE-ReciteQuran.txt">Conditions ReciteQuran</a> · <a href="THIRD_PARTY_NOTICES.txt">Sources et licences</a></details>`;
+  }</section><details class="card"><summary>À propos du suivi vocal</summary><p class="small muted">Sakina.me · version 1.32.2</p><p>Zipformer Quran v3.1 · Quran Lab, via ReciteQuran et le moteur local sherpa-onnx. Reconnaissance des phonèmes en Hafs. Retours expérimentaux, sans validation automatique du tajwid.</p><p>Application personnelle et gratuite. Aucune publicité, aucun compte, aucun envoi d’audio.</p><a href="vendor/LICENSE-ReciteQuran.txt">Conditions ReciteQuran</a> · <a href="THIRD_PARTY_NOTICES.txt">Sources et licences</a></details>`;
 }
 async function resetVoice() {
   errorStreak.reset();
@@ -1504,16 +1539,12 @@ async function openReader(corpus, sid, index = 0) {
   render();
   window.scrollTo(0, 0);
 }
-async function startProgram(id) {
+async function startProgram(id, finishSurah = false) {
   const p = db.programs.find((p) => p.id === id);
   if (!p) return;
-  if (p.endedEarlyOn === day()) {
-    toast("Ta séance est terminée pour aujourd’hui.");
-    return;
-  }
   const checkpoint = lessonMemory(db, p.id);
   const restored = p.corpus==="quran"&&checkpoint?.quranPlanVersion!==QURAN_PLAN_VERSION?null:restoreLesson(checkpoint, p, day());
-  if (restored) {
+  if (restored && !finishSurah) {
     stopPlayback();
     await resetVoice();
     session = regroupRemainingReviews(restored, reviewOptions(p));
@@ -1529,11 +1560,16 @@ async function startProgram(id) {
     render();
     return;
   }
-  const x = prog(p),
+  const offer = finishSurah ? finishSurahOffer(p) : null;
+  if (finishSurah ? !offer : p.endedEarlyOn === day()) {
+    toast("Ta séance est terminée pour aujourd’hui.");
+    return;
+  }
+  const fresh = offer?.ids || prog(p).fresh,
     steps = [],
     targets = learningTargets(
       p.corpus,
-      x.fresh.map((id) => findUnit(p.corpus, id)),
+      fresh.map((id) => findUnit(p.corpus, id)),
     ),
     byId = Object.fromEntries(targets.map((u) => [u.id, u]));
   for (const step of targets.length
@@ -1558,7 +1594,7 @@ async function startProgram(id) {
       test: step.kind === "test",
     });
   }
-  steps.push(...plannedReviews(p));
+  if (!finishSurah) steps.push(...plannedReviews(p));
   steps.splice(
     0,
     steps.length,
@@ -1575,10 +1611,11 @@ async function startProgram(id) {
   await resetVoice();
   session = {
     program: p,
-    returnView: view === "reader" ? "home" : view,
+    returnView: view === "reader" || finishSurah ? "home" : view,
     corpus: p.corpus,
     targets: byId,
-    portionIds: x.fresh,
+    portionIds: fresh,
+    finishSurah,
     steps,
     index: 0,
     current: steps[0],
@@ -1886,10 +1923,15 @@ async function advanceMastered() {
   if (session.index >= session.steps.length) {
     forgetLesson(db, p.id);
     stateSave();
+    const wasEnding = session.finishSurah;
     session = null;
+    if (!wasEnding && finishSurahOffer(p)) {
+      openFinishSurah(p);
+      return;
+    }
     view = "home";
     render();
-    toast("Séance terminée. Les révisions sont prévues.");
+    toast(wasEnding ? "Sourate terminée. Les révisions sont prévues." : "Séance terminée. Les révisions sont prévues.");
     return;
   }
   session.current = session.steps[session.index];
@@ -2188,6 +2230,15 @@ async function action(el) {
       view = "new";
       render();
     }
+  }
+  if (a === "offer-surah-ending") {
+    const program = db.programs.find(p => p.id === el.dataset.id);
+    if (program && finishSurahOffer(program)) openFinishSurah(program);
+    return;
+  }
+  if (a === "start-surah-ending") {
+    await startProgram(el.dataset.id, true);
+    return;
   }
   if (a === "start") await startProgram(el.dataset.id);
   if (a === "edit") {

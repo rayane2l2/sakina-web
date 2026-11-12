@@ -10,7 +10,7 @@ export function dailyCandidates(candidates) {
   return candidates
     .filter(
       (p) =>
-        !p.paused && !p.archived && (p.review || p.fresh || p.waitingUntil),
+        !p.paused && !p.archived && (p.review || p.fresh || p.waitingUntil || p.resume),
     )
     .map((p, order) => ({ ...p, order }))
     .sort((a, b) => {

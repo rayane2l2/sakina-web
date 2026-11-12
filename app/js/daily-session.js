@@ -16,6 +16,7 @@ export function lessonCheckpoint(session, reader, date) {
     steps: session.steps,
     targets: session.targets,
     portionIds: session.portionIds,
+    finishSurah: Boolean(session.finishSurah),
     listened: session.listened,
     listenTarget: session.listenTarget,
     phase: session.phase,
@@ -31,7 +32,7 @@ export function restoreLesson(checkpoint, program, date) {
     !checkpoint ||
     !program ||
     checkpoint.date !== date ||
-    program.endedEarlyOn === date ||
+    (program.endedEarlyOn === date && !checkpoint.finishSurah) ||
     checkpoint.programId !== program.id ||
     checkpoint.memoLogLength !== program.memo.log.length ||
     !Array.isArray(checkpoint.steps) ||
@@ -58,6 +59,7 @@ export function restoreLesson(checkpoint, program, date) {
     current,
     targets: c.targets || {},
     portionIds: c.portionIds || [],
+    finishSurah: Boolean(c.finishSurah),
     listened: Math.max(0, Number(c.listened) || 0),
     listenTarget: Math.max(0, Number(c.listenTarget) || 0),
     phase: c.phase === "recite" ? "recite" : "listen",
@@ -81,4 +83,19 @@ export function confirmedLessonUnits(session, resolve) {
     const words = resolve(id)?.wordRefs;
     return Boolean(words?.length && words.every(word => confirmed.has(`${word.s}:${word.a}`)));
   });
+}
+
+// Offer only the complete ending of a sourah already started in this programme.
+export function remainingSurahVerses(memo, sections) {
+  const next = memo.queue.find(id => !memo.items[id]);
+  if (!next) return null;
+  const surah = sections.find(section => String(section.id) === next.split(":")[0]);
+  if (!surah) return null;
+  const start = surah.units.findIndex(unit => unit.id === next);
+  const count = surah.units.length - start;
+  if (start < 1 || count > 3 || !surah.units.slice(0, start).every(unit => memo.items[unit.id]))
+    return null;
+  const ids = surah.units.slice(start).map(unit => unit.id).filter(id => !memo.items[id]);
+  const queue = new Set(memo.queue);
+  return ids.every(id => queue.has(id)) ? { surah, ids } : null;
 }

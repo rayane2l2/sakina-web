@@ -19,6 +19,7 @@ export function lessonCheckpoint(session, reader, date) {
     portionIds: session.portionIds,
     finishSurah: Boolean(session.finishSurah),
     extraLesson: Boolean(session.extraLesson),
+    endsAtSurahBoundary: Boolean(session.endsAtSurahBoundary),
     listened: session.listened,
     listenTarget: session.listenTarget,
     phase: session.phase,
@@ -63,6 +64,7 @@ export function restoreLesson(checkpoint, program, date) {
     portionIds: c.portionIds || [],
     finishSurah: Boolean(c.finishSurah),
     extraLesson: Boolean(c.extraLesson),
+    endsAtSurahBoundary: Boolean(c.endsAtSurahBoundary),
     listened: Math.max(0, Number(c.listened) || 0),
     listenTarget: Math.max(0, Number(c.listenTarget) || 0),
     phase: c.phase === "recite" ? "recite" : "listen",
@@ -111,4 +113,28 @@ export function extraLessonUnits(program, date, memoCore) {
     if (quota > 0) return pending.slice(0, quota);
   }
   return memoCore.nextNew(program.memo, tomorrow);
+}
+
+// A started sourah gets the rest of the lesson. Complete short sourahs
+// can share a lesson when each fits into the proposed learning portion.
+export function quranLessonPortion(ids, sections) {
+  const first = ids[0];
+  if (!first || !ids.every(id => /^\d+:\d+$/.test(id))) return ids;
+  const surahId = id => id.split(":")[0];
+  const firstSurah = surahId(first);
+  const end = ids.findIndex(id => surahId(id) !== firstSurah);
+  if (end < 0) return ids;
+  const size = new Map(sections.map(section => [String(section.id), section.units.length]));
+  const completeFirst = end === size.get(firstSurah) &&
+    ids.slice(0, end).every((id, i) => id === `${firstSurah}:${i + 1}`);
+  if (!completeFirst) return ids.slice(0, end);
+  let offset = end;
+  while (offset < ids.length) {
+    const sid = surahId(ids[offset]), count = size.get(sid);
+    if (!count || offset + count > ids.length) break;
+    const whole = ids.slice(offset, offset + count).every((id, i) => id === `${sid}:${i + 1}`);
+    if (!whole) break;
+    offset += count;
+  }
+  return ids.slice(0, offset);
 }

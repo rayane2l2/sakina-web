@@ -58,6 +58,7 @@ import {
   confirmedLessonUnits,
   remainingSurahVerses,
   extraLessonUnits,
+  quranLessonPortion,
 } from "./daily-session.js";
 import { createBooksUI } from "./books-ui.js";
 import {
@@ -92,6 +93,8 @@ import {
 } from "./lesson-core.js";
 import {
   mountMushaf,
+  redrawMushaf,
+  centerMushafVerse,
   updateMushaf,
   updateMushafLearning,
   updateMushafPlayback,
@@ -248,10 +251,16 @@ function programmePlan(p, date) {
   const plan = firstDayPlan(p.corpus === "quran"
     ? boundedQuranPlan(p.memo, date, M, { sections: corpora.quran.sections, resolve: id => findUnit("quran", id) })
     : dailyMatnPlan(p.memo, date, M), p, date);
-  if (!p.goal) return plan;
-  const { pending, learnedToday } = memoDeadlineWork(p.memo, date);
-  const quota = deadlineQuota(p.goal, date, pending.length, learnedToday);
-  return quota === null ? plan : { ...plan, fresh: pending.slice(0, quota) };
+  let proposed = plan.fresh;
+  if (p.goal) {
+    const { pending, learnedToday } = memoDeadlineWork(p.memo, date);
+    const quota = deadlineQuota(p.goal, date, pending.length, learnedToday);
+    if (quota !== null) proposed = pending.slice(0, quota);
+  }
+  if (p.corpus !== "quran") return { ...plan, fresh: proposed };
+  const fresh = p.finishedSurahLessonOn === date
+    ? [] : quranLessonPortion(proposed, corpora.quran.sections);
+  return { ...plan, fresh, endsAtSurahBoundary: fresh.length > 0 && fresh.length < proposed.length };
 }
 const totalRevision = (p) => {
   const x = prog(p);
@@ -358,7 +367,20 @@ function readerSheets() {
   }));
 }
 let layoutObserver;
+const systemAppearance = matchMedia("(prefers-color-scheme: dark)");
+function applyAppearance() {
+  const preference = db.settings.appearance;
+  const dark = preference === "dark" || (preference !== "light" && systemAppearance.matches);
+  const mode = dark ? "dark" : "light";
+  if (document.documentElement.dataset.theme === mode) return;
+  document.documentElement.dataset.theme = mode;
+  document.querySelector('meta[name="theme-color"]').content = dark ? "#101621" : "#ffffff";
+  redrawMushaf();
+}
+systemAppearance.addEventListener("change", applyAppearance);
+
 function render() {
+  applyAppearance();
   const previousMatnScroll=root.querySelector(".matn-library-scroll");if(previousMatnScroll&&!session)reader.matnScroll=previousMatnScroll.scrollTop;
   const previousMushaf=root.querySelector("#printed-mushaf"),mushafTop=previousMushaf?.parentElement.scrollTop,mushafPage=previousMushaf?.dataset.currentPage;
   const verseScroll = root.querySelector('.quran-verse-scroll');
@@ -1217,7 +1239,12 @@ function reminderPanel() {
   );
 }
 function settings() {
-  return `${title("Mon espace")}${reminderPanel()}<section class="card"><span class="tag">HORS CONNEXION</span><h2>Hors connexion</h2>${button("Préparer l’accès hors connexion", "offline", "primary block", offlineBusy ? "disabled" : "")}<p id="offline-progress" class="small muted"></p><p class="small muted">Pour le Coran, télécharge les audios des passages souhaités depuis la lecture.</p></section><section class="card form-card">${modelPicker(db.settings.recognitionModel)}<p class="small muted">Le modèle 3.1 fonctionne sur cet appareil.</p><h2>Audio</h2><label>Récitateur<select id="reciter">${[
+  const selected = db.settings.appearance || "system";
+  const options = [["system", "Automatique"], ["light", "Clair"], ["dark", "Sombre"]];
+  const appearance = `<section class="card form-card"><h2>Apparence</h2><label>Thème<select id="appearance">${options.map(([value, label]) =>
+    `<option value="${value}" ${selected === value ? "selected" : ""}>${label}</option>`,
+  ).join("")}</select></label></section>`;
+  return `${title("Mon espace")}${appearance}${reminderPanel()}<section class="card"><span class="tag">HORS CONNEXION</span><h2>Hors connexion</h2>${button("Préparer l’accès hors connexion", "offline", "primary block", offlineBusy ? "disabled" : "")}<p id="offline-progress" class="small muted"></p><p class="small muted">Pour le Coran, télécharge les audios des passages souhaités depuis la lecture.</p></section><section class="card form-card">${modelPicker(db.settings.recognitionModel)}<p class="small muted">Le modèle 3.1 fonctionne sur cet appareil.</p><h2>Audio</h2><label>Récitateur<select id="reciter">${[
     ["minshawi", "Minshawi · murattal"],
     ["husary", "Husary · murattal"],
     ["alafasy", "Mishary Alafasy"],
@@ -1245,7 +1272,7 @@ function settings() {
           })
           .join("")
       : '<p class="muted">Une étoile dans la lecture, et tu retrouves ton passage ici.</p>'
-  }</section><details class="card"><summary>À propos du suivi vocal</summary><p class="small muted">Sakina.me · version 1.32.3</p><p>Zipformer Quran v3.1 · Quran Lab, via ReciteQuran et le moteur local sherpa-onnx. Reconnaissance des phonèmes en Hafs. Retours expérimentaux, sans validation automatique du tajwid.</p><p>Application personnelle et gratuite. Aucune publicité, aucun compte, aucun envoi d’audio.</p><a href="vendor/LICENSE-ReciteQuran.txt">Conditions ReciteQuran</a> · <a href="THIRD_PARTY_NOTICES.txt">Sources et licences</a></details>`;
+  }</section><details class="card"><summary>À propos du suivi vocal</summary><p class="small muted">Sakina.me · version 1.33</p><p>Zipformer Quran v3.1 · Quran Lab, via ReciteQuran et le moteur local sherpa-onnx. Reconnaissance des phonèmes en Hafs. Retours expérimentaux, sans validation automatique du tajwid.</p><p>Application personnelle et gratuite. Aucune publicité, aucun compte, aucun envoi d’audio.</p><a href="vendor/LICENSE-ReciteQuran.txt">Conditions ReciteQuran</a> · <a href="THIRD_PARTY_NOTICES.txt">Sources et licences</a></details>`;
 }
 async function resetVoice() {
   errorStreak.reset();
@@ -1585,8 +1612,11 @@ async function startProgram(id, mode = "daily") {
   if (mode === "daily" && canContinueToday(p)) mode = "extra";
   const ending = mode === "ending" ? finishSurahOffer(p) : null;
   const extra = mode === "extra" && canContinueToday(p);
-  const fresh = ending?.ids || (extra ? extraLessonUnits(p, day(), M) : mode === "daily" ? prog(p).fresh : []);
-  const includeReviews = mode === "daily";
+  const dailyPlan = mode === "daily" ? prog(p) : null;
+  const proposed = extra ? extraLessonUnits(p, day(), M) : [];
+  const additional = p.corpus === "quran" ? quranLessonPortion(proposed, corpora.quran.sections) : proposed;
+  const fresh = ending?.ids || dailyPlan?.fresh || additional;
+  const includeReviews = Boolean(dailyPlan);
   const finishSurah = Boolean(ending);
   const extraLesson = Boolean(extra);
   const steps = [],
@@ -1640,6 +1670,7 @@ async function startProgram(id, mode = "daily") {
     portionIds: fresh,
     finishSurah,
     extraLesson,
+    endsAtSurahBoundary: Boolean(dailyPlan?.endsAtSurahBoundary),
     steps,
     index: 0,
     current: steps[0],
@@ -1669,6 +1700,7 @@ function stopPlayback() {
   playingPrintedWord = null;
   repeatNow = 0;
   updateMushafPlayback(null, null);
+  centerMushafVerse(null);
 }
 async function listen(units = currentUnits(), extra = false, options = {}) {
   if(!session)freeAudioLoading=true;
@@ -1759,21 +1791,8 @@ async function listen(units = currentUnits(), extra = false, options = {}) {
             ? `Écoute ${rep} · ${corpora[currentCorpus()].unit} ${u.n}`
             : "Écoute terminée.";
         updateVoiceDOM();
-        if (u && verseMode() && !options.word) {
-          const scroller = root.querySelector(".quran-verse-scroll"),
-            card = root.querySelector(`[data-verse-key="${CSS.escape(u.id)}"]`);
-          if (scroller && card) {
-            const bounds = scroller.getBoundingClientRect(),
-              rect = card.getBoundingClientRect();
-            if (rect.top < bounds.top || rect.bottom > bounds.bottom)
-              scroller.scrollTo({
-                top: scroller.scrollTop + rect.top - bounds.top - 8,
-                behavior: matchMedia("(prefers-reduced-motion: reduce)").matches
-                  ? "instant"
-                  : "smooth",
-              });
-          }
-        }
+        if (u && !options.word && currentCorpus() === "quran") followQuranAudio(u);
+        else if (!u) centerMushafVerse(null);
       },
       () => {
         if (completePortion && session === lesson && session.current === step) {
@@ -1796,7 +1815,8 @@ async function listen(units = currentUnits(), extra = false, options = {}) {
             updateVoiceDOM();
           }
         }
-        followLearningTime(u.id, time, duration);
+        if (currentCorpus() === "quran" && !options.word) followQuranAudio(u, time, duration);
+        else followLearningTime(u.id, time, duration);
       },
     );
     if (
@@ -1863,13 +1883,7 @@ function followLearningAudio(id) {
   const changed = reader.followId !== unit.id;
   reader.followId = unit.id;
   if (printedLearning()) {
-    const page = playbackPage(unit, pageIndex),
-      sheets = readerSheets(),
-      index = sheets.findIndex((s) => s.page === page);
-    if (index >= 0 && index !== (reader.sheet || 0)) {
-      reader.sheet = index;
-      render();
-    } else updateMushafLearning(learningAppearance(), isHidden());
+    updateMushafLearning(learningAppearance(), isHidden());
     return;
   }
   const page = document.querySelector(".learning-page");
@@ -1887,6 +1901,25 @@ function followLearningAudio(id) {
       { duration: 180, easing: "cubic-bezier(.2,.7,.2,1)" },
     );
 }
+function followQuranAudio(unit, time = 0, duration = 0) {
+  if (verseMode()) {
+    const scroller = root.querySelector(".quran-verse-scroll");
+    const card = scroller?.querySelector(`[data-verse-key="${CSS.escape(unit.id)}"]`);
+    if (!card || scroller.dataset.followedAyah === unit.id) return;
+    scroller.dataset.followedAyah = unit.id;
+    const bounds = scroller.getBoundingClientRect(), rect = card.getBoundingClientRect();
+    const top = scroller.scrollTop + rect.top - bounds.top + (Math.min(rect.height, scroller.clientHeight) - scroller.clientHeight) / 2;
+    scroller.scrollTo({ top, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
+    return;
+  }
+  const position = Number(playingPrintedWord?.split(":").at(-1));
+  const pages = unit.pages || [unit.page];
+  const page = pages.length === 1 ? pages[0] : pages.find(n => Number.isFinite(position) &&
+    pageIndex[n - 1]?.lines.some(line => line.words.some(word => `${word.s}:${word.a}:${word.w}` === playingPrintedWord)))
+    || playbackPage(unit, pageIndex, time, duration);
+  centerMushafVerse(unit.id, page, position);
+}
+
 function followLearningTime(id, time, duration) {
   if (
     !simpleLearning() ||
@@ -1896,26 +1929,6 @@ function followLearningTime(id, time, duration) {
     duration <= 0
   )
     return;
-  if (printedLearning()) {
-    const unit = followUnit(currentUnits(), id);
-    if (!unit) return;
-    const ref = playingPrintedWord?.split(":").map(Number);
-    const page = ref
-        ? pageIndex.find((p) =>
-            p.lines.some((l) =>
-              l.words.some(
-                (w) => w.s === ref[0] && w.a === ref[1] && w.w === ref[2],
-              ),
-            ),
-          )?.n || playbackPage(unit, pageIndex, time, duration)
-        : playbackPage(unit, pageIndex, time, duration),
-      index = readerSheets().findIndex((s) => s.page === page);
-    if (index >= 0 && index !== (reader.sheet || 0)) {
-      reader.sheet = index;
-      render();
-    }
-    return;
-  }
   const page = document.querySelector(".learning-page.lyric-mode"),
     track = page?.querySelector(".lyric-track");
   if (!track) return;
@@ -1941,6 +1954,8 @@ async function advanceMastered() {
         p.memo = completeQuranRotation(p.memo,rotation,day());
       }
   }
+  if (step.kind === "new" && step.test && session.endsAtSurahBoundary)
+    p.finishedSurahLessonOn = day();
   if (step.kind === "new" && step.test){const before=p.memo;p.memo=M.learn(p.memo,session.portionIds,day());if(p.corpus==='quran'){p.memo=registerLongCompletion(before,p.memo,corpora.quran.sections,id=>findUnit('quran',id),day());const whole=completionReview(p.memo,corpora.quran.sections,id=>findUnit('quran',id));if(whole)session.steps.splice(session.index+1,0,whole);}}
   stateSave();
   session.index++;
@@ -2798,6 +2813,12 @@ root.addEventListener("change", async (e) => {
   const el = e.target;
   try {
     if(view==="new"&&guide().change(el))return;
+    if (el.id === "appearance") {
+      db.settings.appearance = el.value;
+      applyAppearance();
+      stateSave();
+      return;
+    }
     if (el.closest("#program-form")) {
       if (
         el.hasAttribute("data-select-section") ||

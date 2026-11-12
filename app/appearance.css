@@ -1,0 +1,150 @@
+:root {
+  color-scheme: only light;
+  --tj-liaison: #626872;
+  --tj-madd-normal: #8e6209;
+  --tj-madd-permitted: #b44e1a;
+  --tj-madd-connected: #c52d43;
+  --tj-madd-necessary: #b12b93;
+  --tj-nasal: #168045;
+  --tj-qalqalah: #275bd3;
+  --tj-assimilation: #7439c2;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #101621;
+  --surface: #192434;
+  --surface-raised: #233147;
+  --soft: #22314a;
+  --sage-light: var(--soft);
+  --ink: #edf2fa;
+  --muted: #b2bed1;
+  --accent: #9bbcff;
+  --book-blue: #b3cdff;
+  --sage: var(--accent);
+  --gold: #d9c8a6;
+  --line: #374761;
+  --focus-surface: #2b4267;
+  --danger-ink: #ffbaaa;
+  --danger-surface: #492b2e;
+  --tj-liaison: #b7bfca;
+  --tj-madd-normal: #e8bc66;
+  --tj-madd-permitted: #f4a06b;
+  --tj-madd-connected: #ff828a;
+  --tj-madd-necessary: #f29ad9;
+  --tj-nasal: #65d695;
+  --tj-qalqalah: #80afff;
+  --tj-assimilation: #c3a3f6;
+  --mushaf-ink: #edf2fa;
+  --mushaf-accent: #b4cdff;
+  --mushaf-focus: #2b4267;
+  --mushaf-focus-soft: #243752;
+  --mushaf-focus-line: #80a9f4;
+  --mushaf-future: #8797af;
+  --mushaf-ornament: #c6b893;
+  --mushaf-learning-ornament: #a5b5cb;
+  --mushaf-heard-bg: #23435a;
+  --mushaf-heard: #c0eaff;
+  --mushaf-heard-line: #8ccfe9;
+  --mushaf-check-bg: #59352c;
+  --mushaf-check: #ffd0b5;
+  --mushaf-waiting-bg: #404d60;
+}
+
+[data-theme="dark"] :is(body, .boot, .program-guide, .matn-library-chapter, .phonetic-page) {
+  background: var(--bg);
+  color: var(--ink);
+}
+
+[data-theme="dark"] :is(.card, .section-row, .review-row, .home-book, .page-jump, .search,
+.reader-stage, .reader-stage .printed-page, .learning-open .learning-card, .quran-book-reading,
+.quran-book-sheet, .qa-face, .qa-document-scroll, .guide-choice, .guide-range, .guide-note,
+.note, .reminder-preview, .tajweed-legend, .phonetic-legend, .reader-menu, .speed-menu.modern-speed) {
+  background: var(--surface);
+  color: var(--ink);
+  border-color: var(--line);
+  box-shadow: none;
+}
+
+[data-theme="dark"] .verse-reading-stage { background: var(--surface) !important; }
+[data-theme="dark"] :is(.nav, .seg, .dock-tools, .listen-bar, .reciting-controls, .quran-display,
+.btn.display-switch, .selection-lens, .selection-summary span) {
+  background: var(--soft);
+  color: var(--muted);
+  border-color: var(--line);
+}
+
+[data-theme="dark"] :is(.btn.secondary, .app-back, .qa-study-head .qa-close, .qa-study-meta .qa-shuffle,
+.qa-verse-audio .qa-audio, .qa-ratings .qa-grade, .reader-dock .reader-visibility,
+.dock-tools .mic:not(.recording), .listen-bar .listen-queue, .reciting-controls .learning-secondary,
+.speed-adjustments .btn, .speed-heading .speed-dismiss, .guide-measures button, .guide-chips button,
+.verse-listen, .surah-number, .reminder-days input:checked + span) {
+  background: var(--surface-raised);
+  color: var(--accent);
+  border-color: var(--line);
+}
+
+[data-theme="dark"] :is(.nav button[aria-current="page"], .guide-choice.selected,
+.quran-display .btn[aria-pressed="true"], .guide-measures .selected) {
+  background: var(--focus-surface);
+  color: var(--ink);
+  border-color: var(--accent);
+}
+
+[data-theme="dark"] .seg .btn.selected { background: var(--focus-surface) !important; color: var(--ink) !important; }
+[data-theme="dark"] .wizard-shell .guide-scope .btn:not(.selected) { background: var(--surface-raised) !important; color: var(--ink); }
+[data-theme="dark"] .btn.danger { background: var(--danger-surface); color: var(--danger-ink); border-color: var(--line); }
+[data-theme="dark"] .qa-ratings .qa-grade-3 { background: #2859c4; color: white; }
+[data-theme="dark"] :is(.btn.text, a, .brand-suffix, .listen-queue .listen-add, .listen-bar .speed-trigger,
+.dock-tools .speed-trigger, .qa-card-tag, .qa-undo, .speed-readout output, .ruler-tick.active small,
+.qa-document-entry[lang="ar"] .qa-document-question .qa-text, .qa-front-content .qa-arabic:lang(ar)) { color: var(--accent); }
+[data-theme="dark"] :is(.app-brand, .section-row b, .display-switch .is-current, .matn-library-text,
+.matn-lyric-current, .phonetic-word, .quran-verse-block p, .phonetic-ayah-mark > span,
+.card details summary, details.card summary, .boot p) { color: var(--ink); }
+[data-theme="dark"] :is(.small, .muted, .tag, .nav button, .section-row small, .section-ar, .qa-study-head small,
+.qa-study-meta, .qa-tap-hint, .qa-verse-audio > small, .guide-choice small, .guide-list small,
+.quran-display .btn:not([aria-pressed="true"]), .reader-status, .reader-head .small, .reader-head .eyebrow,
+.reader-navigation span, .printed-caption, .speed-heading, .normal-speed span, .quran-verse-help,
+.phonetic-legend p, .tajweed-key dd, .matn-attribution, .matn-lyric-neighbor) { color: var(--muted); }
+[data-theme="dark"] :is(.form-card input, .form-card select, input[type="number"], select,
+.program-guide input:not([type="checkbox"]), .guide-book-stage input) {
+  background: var(--bg);
+  color: var(--ink);
+  border-color: var(--line);
+}
+[data-theme="dark"] .guide-search { background: var(--bg) !important; }
+[data-theme="dark"] :is(.form-card label, .guide-book-progress, .program-guide > header, .quran-size-setting) { color: var(--muted); }
+[data-theme="dark"] :is(.progress, .qa-audio-progress, .dock-tools .level, .learning-open .learning-progress) { background: var(--line); }
+[data-theme="dark"] :is(.qa-document-question, .qa-document-entry, .quran-verse-block, .guide-list label,
+.guide-book-footer, .program-guide > footer, .tajweed-key > div) { border-color: var(--line); }
+[data-theme="dark"] .reading-resume { background: var(--surface) !important; color: var(--accent) !important; border-color: var(--line) !important; }
+[data-theme="dark"] .reading-resume small { color: var(--muted); }
+[data-theme="dark"] .verse-phonetic { color: var(--muted) !important; }
+[data-theme="dark"] .tajweed-legend-rules p { color: var(--muted) !important; }
+[data-theme="dark"] .qa-quran-svg { filter: brightness(0) invert(.92); }
+[data-theme="dark"] :is(.quran-word.is-speaking, .quran-word:hover, .quran-word:focus-visible) { background: var(--focus-surface); }
+[data-theme="dark"] .quran-word.is-speaking { color: var(--accent); }
+[data-theme="dark"] .quran-word.is-heard { color: var(--mushaf-heard); }
+[data-theme="dark"] .quran-word.is-check { background: var(--mushaf-check-bg); color: var(--mushaf-check); }
+[data-theme="dark"] .verse.playing { background: var(--focus-surface) !important; }
+[data-theme="dark"] :is(.verse.playing p, .matn-lyric-current.is-playing) { color: var(--accent); }
+[data-theme="dark"] :is(.reader-menu, .speed-menu)::backdrop { background: #080d19b8; }
+[data-theme="dark"] .quran-book-sheet {
+  --book-blue: #b3cdff;
+  --book-rule: var(--line);
+}
+[data-theme="dark"] :is(.settings-link, .section-ar, .matn-library-number, .sheet-nav, .learning-sheets) { color: var(--muted); }
+[data-theme="dark"] :is(.reader-dock .reader-navigation .btn, .reader-toolbar > .reveal-next,
+.speed-adjustments .normal-speed, .guide-ready, .known-range, .known-remove) {
+  background: var(--surface-raised);
+  color: var(--accent);
+  border-color: var(--line);
+}
+[data-theme="dark"] :is(.learning-open .learning-page, .reader-stage .matn-page, .qa-document-entry .qa-text) {
+  color: var(--ink);
+}
+[data-theme="dark"] .qa-document-entry[lang="ar"] .qa-document-question .qa-text { color: var(--accent); }
+[data-theme="dark"] .phonetic-word.is-speaking { color: var(--accent) !important; background: var(--focus-surface) !important; }
+[data-theme="dark"] .phonetic-word.heard { color: var(--mushaf-heard) !important; }
+[data-theme="dark"] .phonetic-word.check { color: var(--mushaf-check) !important; }
+[data-theme="dark"] .listen-bar .listen-queue:hover { background: var(--focus-surface); }

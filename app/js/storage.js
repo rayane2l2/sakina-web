@@ -12,6 +12,7 @@ const empty = () => ({
   bookmarks: [],
   settings: {
     reciter: "minshawi",
+    appearance: "system",
     wordVoice: "quran-com",
     quranReadingMode: "mushaf",
     quranTextSize: 40,

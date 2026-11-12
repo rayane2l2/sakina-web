@@ -47,7 +47,7 @@ export async function mountMushaf({units,hidden=false,fullPage=false,pageNumbers
  const host=document.querySelector('#printed-mushaf');if(!host)return;
  current?.observer?.disconnect();current?.pageObserver?.disconnect();const token=++revision;
  const config=current={units,hidden,fullPage,onVerse,statuses,revealedAyahs,revealRecognized,learning,playing,playingWord,canvases:[]};
- host.classList.add('continuous-mushaf');host.replaceChildren();const stage=host.closest('#reader-stage');
+ host.classList.add('continuous-mushaf');host.replaceChildren();const stage=host.closest('#reader-stage');config.stage=stage;
  const keys=new Set(),ayahs=new Set(units.map(u=>u.id));units.forEach(u=>u.wordRefs?.forEach(w=>keys.add(wordKey(w))));
  for(const n of pageNumbers){const paper=document.createElement('section');paper.className='printed-page';paper.dataset.page=n;paper.innerHTML=`<div class="printed-caption">Page ${n}</div><div class="page-placeholder">Ouverture de la page…</div>`;host.append(paper);}
  if(scrollTop!=null)stage.scrollTop=scrollTop;else if(initialPage){const paper=host.querySelector(`[data-page="${initialPage}"]`);if(paper)stage.scrollTop=paper.offsetTop-host.offsetTop;}
@@ -57,15 +57,67 @@ export async function mountMushaf({units,hidden=false,fullPage=false,pageNumbers
  const width=Math.max(1,host.clientWidth-4),dpr=Math.min(devicePixelRatio||1,2),scale=width/page.width;canvas.width=Math.round(width*dpr);canvas.height=Math.round(page.height*scale*dpr);paper.querySelector('.page-placeholder')?.remove();paper.append(canvas);
  const allowedSurahs=new Set(units.flatMap(u=>(u.wordRefs||[]).map(w=>w.s))),allowedAyahs=new Set(units.flatMap(u=>(u.wordRefs||[]).map(w=>`${w.s}:${w.a}`))),excludedDecorations=new Set();for(const d of page.decorations)if(d.surah&&(!allowedSurahs.has(d.surah)||(d.ayah&&!allowedAyahs.has(`${d.surah}:${d.ayah}`))))for(let i=d.firstPath;i<d.firstPath+d.nPaths;i++)excludedDecorations.add(i);
  const entry={page,canvas,chosen,from,to,excludedDecorations,keys:new Set(chosen.map(w=>w.index)),dpr,scale,paths:page.buildPaths()};config.canvases.push(entry);
- if(!learning)canvas.addEventListener('click',e=>{const rect=canvas.getBoundingClientRect(),x=(e.clientX-rect.left)*page.width/rect.width,y=(e.clientY-rect.top)*page.height/rect.height;const w=chosen.find(w=>{const b=wordBand(page,w);return x>=b.x-2&&x<=b.x+b.width+2&&y>=b.y&&y<=b.y+b.height;});if(w)onVerse(`${w.surah}:${w.ayah}`);});redraw();
+ if(!learning)canvas.addEventListener('click',e=>{const rect=canvas.getBoundingClientRect(),x=(e.clientX-rect.left)*page.width/rect.width,y=(e.clientY-rect.top)*page.height/rect.height;const w=chosen.find(w=>{const b=wordBand(page,w);return x>=b.x-2&&x<=b.x+b.width+2&&y>=b.y&&y<=b.y+b.height;});if(w)onVerse(`${w.surah}:${w.ayah}`);});redrawMushaf();
+ if(config.focus?.page===page.page) centerMushafVerse(config.focus.id, page.page, config.focus.position);
  }catch(e){if(token===revision&&paper.isConnected){paper.querySelector('.page-placeholder').innerHTML='<button type="button" class="btn secondary">Réessayer</button>';paper.querySelector('button').onclick=()=>{delete paper.dataset.loading;void mountPage(paper);};console.error(e);}}finally{delete paper.dataset.loading;}};
  const observer=new IntersectionObserver(entries=>{for(const entry of entries){const paper=entry.target;if(entry.isIntersecting){paper.dataset.visible='true';void mountPage(paper);}else{paper.dataset.visible='false';const canvas=paper.querySelector('canvas');if(canvas){config.canvases=config.canvases.filter(e=>e.canvas!==canvas);canvas.remove();paper.insertAdjacentHTML('beforeend','<div class="page-placeholder">Ouverture de la page…</div>');}}}},{root:stage,rootMargin:'650px 0px'});config.observer=observer;
  const pageObserver=new IntersectionObserver(entries=>{const visible=entries.filter(e=>e.isIntersecting).sort((a,b)=>b.intersectionRatio-a.intersectionRatio);if(visible.length&&token===revision)onPage?.(Number(visible[0].target.dataset.page));},{root:stage,threshold:[.25,.5,.75]});config.pageObserver=pageObserver;
  host.querySelectorAll('.printed-page').forEach(p=>{observer.observe(p);pageObserver.observe(p);});
 }
 
-function redraw() {
-  if (!current) return;
+export function centerMushafVerse(id, page, position) {
+  if (!current?.stage?.isConnected) return;
+  if (!id) {
+    current.focus = null;
+    current.focusKey = null;
+    return;
+  }
+  const stage = current.stage;
+  const previous = current.focus;
+  current.focus = { id, page, position };
+  const entry = current.canvases.find(entry => entry.page.page === page);
+  if (!entry) {
+    if (previous?.page === page) return;
+    const paper = stage.querySelector(`.printed-page[data-page="${page}"]`);
+    if (paper) stage.scrollTop += paper.getBoundingClientRect().top - stage.getBoundingClientRect().top;
+    return;
+  }
+  const words = entry.chosen.filter(word => `${word.surah}:${word.ayah}` === id);
+  if (!words.length) return;
+  const first = words[0], last = words.at(-1);
+  const active = last.lineIndex - first.lineIndex > 2
+    ? words.find(word => word.word === position) : null;
+  const focusKey = `${page}:${id}:${active?.lineIndex ?? ""}`;
+  if (current.focusKey === focusKey) return;
+  current.focusKey = focusKey;
+  const y = active ? entry.page.lines[active.lineIndex].centre
+    : (entry.page.lines[first.lineIndex].centre + entry.page.lines[last.lineIndex].centre) / 2;
+  const canvas = entry.canvas.getBoundingClientRect();
+  const top = stage.scrollTop + canvas.top - stage.getBoundingClientRect().top
+    + y * canvas.height / entry.page.height - stage.clientHeight / 2;
+  stage.scrollTo({ top, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
+}
+
+export function redrawMushaf() {
+  if (!current?.canvases.length) return;
+  const style = getComputedStyle(document.documentElement);
+  const color = (name, fallback) => style.getPropertyValue("--mushaf-" + name).trim() || fallback;
+  const palette = {
+    "focus": color("focus", "#e8efff"),
+    "heard-bg": color("heard-bg", "#c7e5fa"),
+    "check-bg": color("check-bg", "#ffcfad"),
+    "waiting-bg": color("waiting-bg", "#b9b8b3"),
+    "heard-line": color("heard-line", "#005b9a"),
+    "check": color("check", "#a32f0c"),
+    "heard": color("heard", "#003e6d"),
+    "ink": color("ink", "#17253b"),
+    "ornament": color("ornament", "#7c7357"),
+    "focus-soft": color("focus-soft", "#edf3fe"),
+    "focus-line": color("focus-line", "#2859c4"),
+    "future": color("future", "#c3cad5"),
+    "learning-ornament": color("learning-ornament", "#8b98ae"),
+    "accent": color("accent", "#2857b6"),
+  };
   const states = new Map();
   let i = 0;
   for (const u of current.units)
@@ -81,7 +133,7 @@ function redraw() {
     const paths = entry.paths,
       lines = new Set(chosen.map((w) => w.line));
     if (current.learning) {
-      drawLearning(entry, c, paths);
+      drawLearning(entry, c, paths, palette);
       continue;
     }
     canvas.dataset.playingAyah = current.playing || "";
@@ -98,11 +150,11 @@ function redraw() {
         );
       if (masked) continue;
       if (current.playingWord === `${w.surah}:${w.ayah}:${w.word}`) {
-        c.fillStyle = "#e8efff";
+        c.fillStyle = palette["focus"];
         c.beginPath();
         c.roundRect(b.x, b.y, b.width, b.height, 2);
         c.fill();
-        c.strokeStyle = "#2857b6";
+        c.strokeStyle = palette["accent"];
         c.lineWidth = 1;
         c.beginPath();
         c.moveTo(b.x, b.y + b.height);
@@ -112,17 +164,17 @@ function redraw() {
       if (status === "heard" || status === "check") {
         c.fillStyle =
           status === "heard"
-            ? "#c7e5fa"
+            ? palette["heard-bg"]
             : status === "check"
-              ? "#ffcfad"
-              : "#b9b8b3";
+              ? palette["check-bg"]
+              : palette["waiting-bg"];
         c.beginPath();
         c.roundRect(b.x, b.y, b.width, b.height, 2);
         c.fill();
       }
       if (status === "heard" || status === "check") {
         const bottom = b.y + b.height;
-        c.strokeStyle = status === "heard" ? "#005b9a" : "#a32f0c";
+        c.strokeStyle = status === "heard" ? palette["heard-line"] : palette["check"];
         c.lineWidth = 1.3;
         c.beginPath();
         if (status === "heard") {
@@ -160,22 +212,22 @@ function redraw() {
           continue;
         c.fillStyle =
           status === "heard"
-            ? "#003e6d"
+            ? palette["heard"]
             : status === "check"
-              ? "#a32f0c"
+              ? palette["check"]
               : current.playingWord === `${w.surah}:${w.ayah}:${w.word}`
-                ? "#2857b6"
-                : "#17253b";
+                ? palette["accent"]
+                : palette["ink"];
       } else {
         if(entry.excludedDecorations?.has(p))continue;
         if (!current.fullPage && !lines.has(page.pathLine(p))) continue;
-        c.fillStyle = "#7c7357";
+        c.fillStyle = palette["ornament"];
       }
       c.fill(paths[p], page.pathEvenOdd(p) ? "evenodd" : "nonzero");
     }
   }
 }
-function drawLearning(entry, c, paths) {
+function drawLearning(entry, c, paths, palette) {
   const { page, canvas } = entry,
     states = new Map(),
     bands = new Map(),
@@ -203,11 +255,11 @@ function drawLearning(entry, c, paths) {
     }
   }
   for (const b of bands.values()) {
-    c.fillStyle = "#edf3fe";
+    c.fillStyle = palette["focus-soft"];
     c.beginPath();
     c.roundRect(b.x0 - 3, b.y, b.x1 - b.x0 + 6, b.h, 3);
     c.fill();
-    c.strokeStyle = "#2859c4";
+    c.strokeStyle = palette["focus-line"];
     c.lineWidth = 0.8;
     c.beginPath();
     c.moveTo(b.x0, b.y + b.h);
@@ -221,11 +273,11 @@ function drawLearning(entry, c, paths) {
       if (state === "hidden") continue;
       c.fillStyle =
         state === "future"
-          ? "#c3cad5"
+          ? palette["future"]
           : state === "active"
-            ? "#2857b6"
-            : "#17253b";
-    } else c.fillStyle = "#8b98ae";
+            ? palette["accent"]
+            : palette["ink"];
+    } else c.fillStyle = palette["learning-ornament"];
     c.fill(paths[p], page.pathEvenOdd(p) ? "evenodd" : "nonzero");
   }
   canvas.dataset.knownWords = counts.known + counts.active;
@@ -238,7 +290,7 @@ export function updateMushafLearning(learning, hidden) {
   if (current?.learning) {
     current.learning = learning;
     current.hidden = hidden;
-    redraw();
+    redrawMushaf();
   }
 }
 export function updateMushaf(statuses, hidden) {
@@ -251,7 +303,7 @@ export function updateMushaf(statuses, hidden) {
       return;
     current.statuses = statuses;
     current.hidden = hidden;
-    redraw();
+    redrawMushaf();
   }
 }
 
@@ -262,6 +314,6 @@ export function updateMushafPlayback(playing, word = null) {
   ) {
     current.playing = playing;
     current.playingWord = word;
-    redraw();
+    redrawMushaf();
   }
 }

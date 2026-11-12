@@ -814,7 +814,7 @@ function library() {
   const picker = categories.map(([id, label]) =>
     button(label, "corpus", category === id ? "selected" : "", `data-corpus="${id}" aria-pressed="${category === id}"`),
   ).join("");
-  const detail = corpus ? `<div class="library-title-row">${button("‹ Moutoun", "corpus", "text", 'data-corpus="matns"')}<h2>${esc(corpusName(corpus))}</h2></div>
+  const detail = corpus ? `<div class="library-title-row">${button("‹ Moutoun", "corpus", "text", 'data-corpus="matns"')}<h2>${esc(corpus.name)}</h2>${corpus.shortTitleAr || corpus.titleAr ? `<p class="small muted library-work-subtitle"><bdi lang="ar" dir="rtl">${esc(corpus.shortTitleAr || corpus.titleAr)}</bdi></p>` : ""}</div>
     ${button("Écouter en entier", "listen-entire", "secondary block", `data-corpus="${corpus.id}"`)}` : "";
   const page = category === "quran" ? `<div class="page-jump"><label for="page-number">Mushaf · 604 pages</label><div><input type="number" id="page-number" min="1" max="604" value="${reader.page || 1}" aria-label="Numéro de page">${button("Ouvrir la page", "jump-page", "secondary compact")}</div></div>` : "";
   return `${title("Bibliothèque")}<div class="seg library-categories" role="group" aria-label="Catégories de la bibliothèque">${picker}</div>
@@ -1274,7 +1274,7 @@ function settings() {
           })
           .join("")
       : '<p class="muted">Une étoile dans la lecture, et tu retrouves ton passage ici.</p>'
-  }</section><details class="card"><summary>À propos du suivi vocal</summary><p class="small muted">Sakina.me · version 1.33.2</p><p>Zipformer Quran v3.1 · Quran Lab, via ReciteQuran et le moteur local sherpa-onnx. Reconnaissance des phonèmes en Hafs. Retours expérimentaux, sans validation automatique du tajwid.</p><p>Application personnelle et gratuite. Aucune publicité, aucun compte, aucun envoi d’audio.</p><a href="vendor/LICENSE-ReciteQuran.txt">Conditions ReciteQuran</a> · <a href="THIRD_PARTY_NOTICES.txt">Sources et licences</a></details>`;
+  }</section><details class="card"><summary>À propos du suivi vocal</summary><p class="small muted">Sakina.me · version 1.33.3</p><p>Zipformer Quran v3.1 · Quran Lab, via ReciteQuran et le moteur local sherpa-onnx. Reconnaissance des phonèmes en Hafs. Retours expérimentaux, sans validation automatique du tajwid.</p><p>Application personnelle et gratuite. Aucune publicité, aucun compte, aucun envoi d’audio.</p><a href="vendor/LICENSE-ReciteQuran.txt">Conditions ReciteQuran</a> · <a href="THIRD_PARTY_NOTICES.txt">Sources et licences</a></details>`;
 }
 async function resetVoice() {
   errorStreak.reset();

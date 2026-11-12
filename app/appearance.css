@@ -101,10 +101,10 @@
 
 [data-theme="dark"] :is(.btn.text, a, .brand-suffix, .listen-queue .listen-add, .listen-bar .speed-trigger,
 .dock-tools .speed-trigger, .qa-card-tag, .qa-undo, .speed-readout output, .ruler-tick.active small) { color: var(--accent); }
-[data-theme="dark"] :is(.app-brand, .section-row b, .card details summary, details.card summary,
-.boot p, .learning-head h1, .learning-head > div > span, .learning-heading h2,
-.learning-heading p, .learning-position, .lesson-strip p, .reader-head h1, .silent-study,
-.manual-cue, .guide-ready, .guide-yes-no .guide-choice.selected, .quran-book-title strong) {
+[data-theme="dark"] :is(.app-brand, .card details summary, details.card summary,
+.boot p, .learning-head > div > span, .learning-heading h2, .learning-heading p,
+.learning-position, .lesson-strip p, .silent-study, .manual-cue, .guide-ready,
+.guide-yes-no .guide-choice.selected, .quran-book-title > span, .page-title h1) {
   color: var(--accent);
 }
 [data-theme="dark"] :is(.small, .muted, .tag, .nav button, .section-row small, .section-ar, .qa-study-head small,
@@ -173,3 +173,11 @@
   border-color: var(--line);
 }
 [data-theme="dark"] .listen-bar .listen-queue #listen-remaining { color: var(--accent); }
+
+/* Content titles sit above blue navigation and secondary labels. */
+[data-theme="dark"] :is(.home-heading, .card h2, .card h3, .library-title-row h2,
+.section-row b, .book-edition-choice strong, .reader-head h1, .learning-head h1,
+.qa-study-head h1, .qa-document h1, .quran-book-title strong, .matn-library-chapter h2,
+.program-guide h1, .guide-book-main h1) {
+  color: var(--reading-ink);
+}

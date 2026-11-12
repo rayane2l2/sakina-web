@@ -259,6 +259,7 @@ body.wizard-open { overflow: hidden; }
 .library-matn-row .surah-number .icon { width: 19px; height: 19px; }
 .library-matn-row small:empty { display: none; }
 .library-title-row h2 { margin: 4px 0 12px; font-size: 21px; }
+.library-work-subtitle { margin: -8px 0 12px; }
 .library-title-row + .btn { margin-bottom: 12px; }
 
 .reading-display {

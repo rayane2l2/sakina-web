@@ -175,25 +175,28 @@ body:has(.program-guide){overflow:hidden}.shell:has(.program-guide){height:calc(
 
 .matn-unit-title { display: block; margin-bottom: .5em; font-weight: 700; }
 .matn-attribution { display: block; margin-top: .65em; font-size: .82em; color: #4e6383; }
-.hadith-page { overflow-y: auto; overscroll-behavior: contain; justify-content: safe center; }
-.hadith-page .lyric-track { min-height: min-content; }
+/* Hadiths keep a readable size and scroll inside the fixed session frame. */
+.reader-stage .matn-page.hadith-page,
+.learning-open .learning-page.hadith-page.lyric-mode {
+  display: block;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  touch-action: pan-y;
+  padding: 12px 16px;
+  font-size: var(--hadith-text-size, clamp(23px, 6vw, 30px));
+}
+.phonetic-reading .matn-page.hadith-page { --hadith-text-size: clamp(18px, 4.5vw, 23px); }
+.hadith-page .lyric-track { display: block; min-height: 0; padding: 0; }
 .hadith-page .matn-hidden p { visibility: hidden; }
+.qa-document > .reading-display { margin: 8px 0; }
+
 
 .deadline-modes { margin: 0 0 16px; }
 .deadline-modes .btn { flex: 1; min-width: 0; white-space: normal; }
 .deadline-modes .btn.selected { background: #2859c4; color: #fff; }
 
-/* The labels and thumb position identify the selected display independently of colour. */
-.btn.display-switch{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;min-height:44px;flex-shrink:0;padding:7px 9px;border:1px solid #dbe4f3;border-radius:14px;background:#f3f6fc;color:#52627b;font-size:12px;line-height:1.15;font-weight:750;box-shadow:none;white-space:normal}
-.display-switch .is-current{color:#17253b;font-weight:900}
-.display-switch-track{position:relative;display:block;flex:0 0 44px;width:44px;height:26px;border:1px solid #8c9ab0;border-radius:20px;background:white;transition:background .18s ease}
-.display-switch-track i{position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:white;border:1px solid #8c9ab0;box-shadow:0 1px 3px #17253b42;transition:transform .18s ease}
-.display-switch[aria-checked=true] .display-switch-track{background:#168149;border-color:#168149}
-.display-switch[aria-checked=true] .display-switch-track i{transform:translateX(18px);border-color:white}
-.reader-toolbar .display-switch{flex:1;min-width:0;width:auto}
-.book-edition-choice small{display:block;margin-top:4px}
-.qa-document > .display-switch{margin-bottom:8px}
-@media(prefers-reduced-motion:reduce){.display-switch-track,.display-switch-track i{transition:none}}
+
 
 /* Keep the setup frame in place. Long selections scroll inside its content. */
 body.wizard-open { overflow: hidden; }
@@ -258,7 +261,7 @@ body.wizard-open { overflow: hidden; }
 .library-title-row h2 { margin: 4px 0 12px; font-size: 21px; }
 .library-title-row + .btn { margin-bottom: 12px; }
 
-.quran-display {
+.reading-display {
   display: grid;
   grid-template-columns: minmax(0, .85fr) minmax(0, 1.45fr);
   gap: 3px;
@@ -268,8 +271,8 @@ body.wizard-open { overflow: hidden; }
   border-radius: 16px;
   background: #edf3fe;
 }
-.reader-toolbar .quran-display { flex: 1; }
-.quran-display .btn.quran-display-option {
+.reader-toolbar .reading-display { flex: 1; }
+.reading-display .btn.reading-display-option {
   min-width: 0;
   min-height: 42px;
   padding: 6px 5px;
@@ -281,7 +284,7 @@ body.wizard-open { overflow: hidden; }
   font-size: 12px;
   line-height: 1.2;
 }
-.quran-display .btn[aria-pressed="true"] {
+.reading-display .btn[aria-pressed="true"] {
   border-color: #cddbf4;
   background: white;
   color: #234fae;

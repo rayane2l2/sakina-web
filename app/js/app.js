@@ -346,9 +346,11 @@ function learningAppearance() {
 }
 function readerSheets() {
   const units = displayUnits();
-  if (simpleLearning() && currentCorpus() !== "quran") {
-    if (session.phase === "listen")
-      return [{ units: [followUnit(units, reader.followId) || units[0]] }];
+  const corpus = currentCorpus();
+  if (simpleLearning() && corpus !== "quran" && session.phase === "listen")
+    return [{ units: [followUnit(units, reader.followId) || units[0]] }];
+  if (corpora[corpus].unit === "hadith") return [{ units }];
+  if (simpleLearning() && corpus !== "quran") {
     return textSheets(
       isHidden() ? units.map((u) => ({ ...u, text: "…" })) : units,
       stageSize.width,
@@ -381,6 +383,9 @@ systemAppearance.addEventListener("change", applyAppearance);
 
 function render() {
   applyAppearance();
+  const motionKey = view + ":" + (session ? session.program.id + ":" + session.index + ":" + session.phase : "");
+  const previousHadith = motionKey === lastMotionKey ? root.querySelector(".hadith-page") : null;
+  const hadithTop = previousHadith?.scrollTop;
   const previousMatnScroll=root.querySelector(".matn-library-scroll");if(previousMatnScroll&&!session)reader.matnScroll=previousMatnScroll.scrollTop;
   const previousMushaf=root.querySelector("#printed-mushaf"),mushafTop=previousMushaf?.parentElement.scrollTop,mushafPage=previousMushaf?.dataset.currentPage;
   const verseScroll = root.querySelector('.quran-verse-scroll');
@@ -456,12 +461,8 @@ function render() {
   });
   const matnDocument=root.querySelector('.matn-library-scroll');if(matnDocument){matnDocument.scrollTop=reader.matnScroll||0;if(reader.followMatnOnReturn||reader.matnScroll==null){const id=section(currentCorpus(),reader.sid)?.units[reader.index]?.id,target=matnDocument.querySelector(`[data-matn-unit="${CSS.escape(id||'')}"]`);if(target)matnDocument.scrollTop+=target.getBoundingClientRect().top-matnDocument.getBoundingClientRect().top-12;reader.followMatnOnReturn=false;}}
   if (view === "books") books.afterRender();
-  const motionKey =
-    view +
-    ":" +
-    (session
-      ? session.program.id + ":" + session.index + ":" + session.phase
-      : "");
+  const hadith = root.querySelector(".hadith-page");
+  if (hadith && previousHadith?.lang === hadith.lang) hadith.scrollTop = hadithTop;
   if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
     if (lastMotionKey !== motionKey)
       root.querySelector(".shell")?.animate(
@@ -497,6 +498,7 @@ function render() {
           Math.abs(next.height - stageSize.height) > 5;
       stageSize = next;
       if (currentCorpus() !== "quran") {
+        if (corpora[currentCorpus()].unit === "hadith" && session) return;
         if (changed) {
           const sheets = readerSheets();
           reader.sheet = Math.min(reader.sheet || 0, sheets.length - 1);
@@ -554,7 +556,7 @@ function fitMatn() {
     return;
   }
   const page = document.querySelector(".matn-page");
-  if (!page) return;
+  if (!page || page.classList.contains("hadith-page")) return;
   const track = page.querySelector(".lyric-track");
   let size = 30;
   page.style.fontSize = size + "px";
@@ -1272,7 +1274,7 @@ function settings() {
           })
           .join("")
       : '<p class="muted">Une étoile dans la lecture, et tu retrouves ton passage ici.</p>'
-  }</section><details class="card"><summary>À propos du suivi vocal</summary><p class="small muted">Sakina.me · version 1.33</p><p>Zipformer Quran v3.1 · Quran Lab, via ReciteQuran et le moteur local sherpa-onnx. Reconnaissance des phonèmes en Hafs. Retours expérimentaux, sans validation automatique du tajwid.</p><p>Application personnelle et gratuite. Aucune publicité, aucun compte, aucun envoi d’audio.</p><a href="vendor/LICENSE-ReciteQuran.txt">Conditions ReciteQuran</a> · <a href="THIRD_PARTY_NOTICES.txt">Sources et licences</a></details>`;
+  }</section><details class="card"><summary>À propos du suivi vocal</summary><p class="small muted">Sakina.me · version 1.33.1</p><p>Zipformer Quran v3.1 · Quran Lab, via ReciteQuran et le moteur local sherpa-onnx. Reconnaissance des phonèmes en Hafs. Retours expérimentaux, sans validation automatique du tajwid.</p><p>Application personnelle et gratuite. Aucune publicité, aucun compte, aucun envoi d’audio.</p><a href="vendor/LICENSE-ReciteQuran.txt">Conditions ReciteQuran</a> · <a href="THIRD_PARTY_NOTICES.txt">Sources et licences</a></details>`;
 }
 async function resetVoice() {
   errorStreak.reset();
@@ -1887,7 +1889,7 @@ function followLearningAudio(id) {
     return;
   }
   const page = document.querySelector(".learning-page");
-  if (!page) return;
+  if (!page || (!changed && page.classList.contains("hadith-page"))) return;
   reader.sheet = 0;
   page.innerHTML = `<div class="lyric-track">${learningText(unit, isHidden())}</div>`;
   page.scrollTop = 0;
@@ -1929,7 +1931,7 @@ function followLearningTime(id, time, duration) {
     duration <= 0
   )
     return;
-  const page = document.querySelector(".learning-page.lyric-mode"),
+  const page = document.querySelector(".learning-page.lyric-mode:not(.hadith-page)"),
     track = page?.querySelector(".lyric-track");
   if (!track) return;
   const overflow = Math.max(0, track.scrollHeight - page.clientHeight),

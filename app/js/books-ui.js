@@ -1,4 +1,4 @@
-import { displaySwitch } from './phonetic-view.js';
+import { readingDisplay } from './phonetic-view.js';
 import { calendarDay, createDeadline, deadlineSummary, formatDeadline, requireDeadlineCapacity } from './deadline-plan.js';
 import {
   programmeGroups,
@@ -239,9 +239,11 @@ export function createBooksUI(host) {
   }
   function languageSwitch() {
     if (!alternateSpec()) return "";
-    const active = (displayEdition || edition).language === "ar";
-    return displaySwitch(B, {
-      left: "Français", right: "Arabe", active, label: "Afficher en arabe", action: "display-language",
+    return readingDisplay(B, {
+      options: [["fr", "Français"], ["ar", "Arabe"]],
+      mode: (displayEdition || edition).language,
+      label: "Langue du livre",
+      action: "display-language",
     });
   }
   function blocks(items) {
@@ -572,6 +574,7 @@ export function createBooksUI(host) {
     }
     e.preventDefault();
     const a = el.dataset.bookAction;
+    if (a === "display-language" && el.dataset.mode === (displayEdition || edition)?.language) return;
     if(a==='wizard-next'){capture();if(a==='wizard-next'&&wizardStep===1)try{draftGoal();}catch(error){host.toast(error.message);return;}if(a==='wizard-next'&&draft.mode==='individual'&&!draft.ids.length){host.toast('Choisis au moins une question.');return;}if(a==='wizard-next'&&draft.mode==='chapters'&&!draft.chapters.length){host.toast('Choisis au moins un chapitre.');return;}wizardStep=Math.max(0,Math.min(2,wizardStep+1));refresh();return;}
     if(a==='wizard-goal'){capture();draft.goalMode=el.dataset.value;refresh();return;}
     if(a==='wizard-pace'){capture();draft.newPerDay=Number(el.dataset.value);refresh();return;}
@@ -617,7 +620,7 @@ export function createBooksUI(host) {
           const entry = scroll?.querySelector(`[data-question="${CSS.escape(aligned)}"]`);
           if (entry) scroll.scrollTop += entry.getBoundingClientRect().top - scroll.getBoundingClientRect().top;
         }
-        document.querySelector('[data-book-action="display-language"]')?.focus({preventScroll:true});
+        document.querySelector('[data-book-action="display-language"][aria-pressed="true"]')?.focus({preventScroll:true});
         return;
       }
       if (a === "read-edition" || a === "choose-edition") {

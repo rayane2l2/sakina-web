@@ -15,31 +15,20 @@ export function phoneticKeyHTML() {
   return '<dl class="phonetic-key">' + rows + '</dl>';
 }
 
-export function displaySwitch(button, {left, right, active, label, action, attrs = ''}) {
-  return button(
-    '<span class="' + (!active ? 'is-current' : '') + '">' + left + '</span>' +
-    '<span class="display-switch-track" aria-hidden="true"><i></i></span>' +
-    '<span class="' + (active ? 'is-current' : '') + '">' + right + '</span>',
-    action, 'display-switch', 'role="switch" aria-checked="' + active + '" aria-label="' + label + '" ' + attrs,
-  );
+export function readingDisplay(button, {options, mode, action, label}) {
+  return '<div class="reading-display" role="group" aria-label="' + label + '">' +
+    options.map(([value, title]) => button(title, action, 'reading-display-option',
+      'data-mode="' + value + '" aria-pressed="' + (mode === value) + '"'),
+    ).join('') + '</div>';
 }
-
 export function readingTabs(mode, button, corpus = 'quran') {
-  if (corpus === 'quran') {
-    return '<div class="quran-display" role="group" aria-label="Affichage du Coran">' +
-      [['mushaf', 'Mushaf'], ['verses', 'Arabe + phonétique']].map(([value, title]) =>
-        button(title, 'quran-reading-mode', 'quran-display-option',
-          'data-mode="' + value + '" aria-pressed="' + (mode === value) + '"'),
-      ).join('') + '</div>';
-  }
-  const active = mode === 'phonetic';
-  return displaySwitch(button, {
-    left: 'Arabe',
-    right: 'Phonétique',
-    active,
-    label: 'Afficher la phonétique',
-    action: 'matn-reading-mode',
-    attrs: 'data-mode="' + (active ? 'text' : 'phonetic') + '"',
+  const quran = corpus === 'quran';
+  return readingDisplay(button, {
+    options: quran ? [['mushaf', 'Mushaf'], ['verses', 'Arabe + phonétique']] :
+      [['text', 'Arabe'], ['phonetic', 'Phonétique']],
+    mode,
+    action: quran ? 'quran-reading-mode' : 'matn-reading-mode',
+    label: quran ? 'Affichage du Coran' : 'Affichage du texte',
   });
 }
 

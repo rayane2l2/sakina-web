@@ -3,6 +3,7 @@ export const MATN_SPECS = Object.freeze([
   {id:'mukhtasar-al-harari',name:'Le Moukhtasar de ʿAbdallah al-Harari',shortTitleAr:'مختصر عبد الله الهرري',file:'mukhtasar-al-harari',unit:'passage',audioRevision:'0de7a6279891'},
   {id:'nawawi-ar', name:'Les 40 hadiths de l’imam An-Nawawi', file:'nawawi-ar', unit:'hadith'},
   {id:'aqida-tahawiyya', name:'La ʿAqīda Ṭaḥāwiyya', file:'aqida-tahawiyya', unit:'passage'},
+  {id:'matn-abi-shuja', name:'Le Matn d’Abū Shujāʿ', file:'matn-abi-shuja', unit:'passage'},
 ]);
 export const corpusName = (corpus) => [corpus.name, corpus.shortTitleAr || corpus.titleAr].filter(Boolean).join(' · ');
 export const supportedCorpus=id=>id==='quran'||id==='ibn-ashir'||MATN_SPECS.some(c=>c.id===id);

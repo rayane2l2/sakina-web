@@ -6,7 +6,6 @@ import {phoneticCorpus,phoneticUnit,unitPhonetic} from './transliteration.js';
 import {createProgramWizard} from './program-wizard.js';
 import { createOfflineStore } from "./offline-cache.js";
 import { ReviewPageCursor, readingPlace } from "./review-continuation.js";
-import { dailyMatnPlan } from "./matn-plan.js";
 import { wordVoice } from "./quran-audio-sync.js";
 import {
   quranReadingMode,
@@ -74,7 +73,7 @@ import { bindSpeedControls, openSpeed } from "./speed-control.js";
 import { hasUnitAudio } from "./matn-corpus.js";
 import { ErrorStreak, SpeechAttempts } from "./recitation-feedback.js";
 import { normalizeModel, modelLabel, modelPicker } from "./model-choice.js";
-import { unitsFromAyah } from "./page-core.js";
+import { unitsFromAyah, wordKey } from "./page-core.js";
 import { learningWords, playbackPage } from "./mushaf-learning.js";
 import {
   listeningProgress,
@@ -83,6 +82,12 @@ import {
 } from "./listen-flow.js";
 import { macroPlan, completeMacroReview } from "./macro-plan.js";
 import { readingView } from "./reader-view.js";
+import { circuitPlan, circuitOrder, maintenanceCycle, normalMaintenanceCycle } from "./revision-circuits.js";
+import { PAGE_REVIEW as reviewRules } from "./revision-settings.js";
+import { fitCircuitBudget, forecastReview, pageMinutes, returnStatus, revisionAdvice, reviewMinutes } from "./revision-support.js";
+import { circuitMatnPlan, milestonePlan, rateMatnPortion, solidityGrid, weeklyPractice } from "./revision-practice.js";
+import { completedSurahChecks, eligibleMaintenancePages, markSurahCheck } from "./recitation-validation.js";
+import { pageCoverage, migratePageState, addLearnedPages, commitPageReviews, PAGE_RATINGS, seedProgrammeReview, startReviewCircuits } from "./page-review.js";
 import {
   learningTargets,
   listeningGoal,
@@ -240,17 +245,17 @@ const planCache = new WeakMap();
 function prog(p) {
   const date = day();
   if (p.endedEarlyOn === date) return programmePlan(p, date);
-  const cached = planCache.get(p.memo);
-  if (cached?.date === date) return cached.value;
+  const cached = planCache.get(p);
+  if (cached?.date === date && cached.memo === p.memo && cached.pageState === p.pageState) return cached.value;
   const value = programmePlan(p, date);
-  planCache.set(p.memo, { date, value });
+  planCache.set(p, { date, value, memo:p.memo, pageState:p.pageState });
   return value;
 }
 function programmePlan(p, date) {
   if (p.endedEarlyOn === date) return { fresh: [], recent: [], revision: [] };
   const plan = firstDayPlan(p.corpus === "quran"
-    ? boundedQuranPlan(p.memo, date, M, { sections: corpora.quran.sections, resolve: id => findUnit("quran", id) })
-    : dailyMatnPlan(p.memo, date, M), p, date);
+    ? quranCircuitPlan(p, date)
+    : circuitMatnPlan(p,date,M,id=>findUnit(p.corpus,id)), p, date);
   let proposed = plan.fresh;
   if (p.goal) {
     const { pending, learnedToday } = memoDeadlineWork(p.memo, date);
@@ -262,6 +267,63 @@ function programmePlan(p, date) {
     ? [] : quranLessonPortion(proposed, corpora.quran.sections);
   return { ...plan, fresh, endsAtSurahBoundary: fresh.length > 0 && fresh.length < proposed.length };
 }
+const surahChecks = programme => completedSurahChecks(programme, corpora.quran.sections, resolveQuran);
+const pendingSurahs = programme => new Set(surahChecks(programme).filter(s => s.status === "pending").map(s => s.id));
+
+function quranCircuitPlan(programme, date) {
+  const fresh = M.nextNew(programme.memo, date);
+  if (programme.reviewStartsOn && date < programme.reviewStartsOn)
+    return {fresh, recent:[], revision:[]};
+  const coverage = pageCoverage(Object.keys(programme.memo.items), pageIndex, resolveQuran);
+  const pending = pendingSurahs(programme);
+  const eligibleWhole = id => !pending.has(id);
+  const maintenance = eligibleMaintenancePages(coverage, pending, resolveQuran);
+  const state = programme.pageState || {};
+  const minutes = pageMinutes(state);
+  const budget = reviewMinutes(db.settings.reviewMinutes);
+  const returning = returnStatus(programme,date);
+  const milestone = milestonePlan(programme,corpora.quran.sections,date,eligibleWhole);
+  const normalCycle = normalMaintenanceCycle(maintenance.length);
+  const maxCycle = maintenanceCycle(maintenance.length);
+  const longerCycle = maxCycle > normalCycle ? maxCycle : null;
+  const cycle = programme.milestones?.khatm && milestone?.key === "khatm" ? reviewRules.khatmCycle :
+    programme.lightenRotation && longerCycle ? longerCycle : normalCycle;
+  const circuits = circuitPlan(state, coverage, date, maintenance, cycle);
+  const pageWeight = ({page,words}) => words.length / Math.max(1,pageIndex[page-1].lines.reduce((sum,line)=>sum+line.words.length,0));
+  const limited = fitCircuitBudget(circuits,state,returning,date,minutes,budget,pageWeight);
+  const scheduled = circuitOrder(limited, []).map(page => ({...page,cycle}));
+  const advice = revisionAdvice(programme,date,limited.estimate,budget,new Set(maintenance.map(p=>p.page)));
+  const planUnits = programme.memo.units;
+  const pacePages = programme.memo.measure === "page" ? programme.memo.pace :
+    (pageCoverage(planUnits,pageIndex,resolveQuran).length * programme.memo.pace / Math.max(1,planUnits.length));
+  const forecast = forecastReview(pacePages,budget,minutes,pageIndex.length);
+  let exerciseBudget = limited.remaining;
+  const extras = returning ? [] : weeklyPractice(programme,maintenance,pageIndex,resolveQuran,date).filter(step => {
+    const cost = step.exerciseKind === "random" ? reviewRules.randomMinutes : reviewRules.junctionSeconds / 60;
+    if (exerciseBudget < cost) return false;
+    exerciseBudget -= cost;
+    return true;
+  });
+  const milestoneStep = milestone?.ids?.length && programme.milestones?.[milestone.key] && !returning &&
+    programme.lastMilestoneOn !== date ? [{ids:milestone.ids,kind:"review",test:true,
+      label:milestone.title,exerciseKind:"milestone",afterLearning:true}] : [];
+  const completion = !returning && limited.remaining >= minutes
+    ? completionReview(programme.memo, corpora.quran.sections, resolveQuran, eligibleWhole) : null;
+  const monthly = completion || (!returning && limited.remaining >= minutes ? mergeReviewSteps(
+    boundedQuranPlan(programme.memo, date, M, {
+      sections:corpora.quran.sections, resolve:resolveQuran, onlyWhole:true, eligibleWhole,
+    }).revision, reviewOptions(programme),
+  )[0] : null);
+  const monthlyCoverage = monthly ? pageCoverage(monthly.ids,pageIndex,resolveQuran) : [];
+  const monthlyFits = monthlyCoverage.reduce((sum,p) => sum + minutes*pageWeight(p),0) <= limited.remaining;
+  const monthlyReview = monthlyFits ? monthly : null;
+  const monthlyWords = monthlyReview ? new Set(monthlyCoverage.flatMap(p => p.words)) : null;
+  const pages = monthlyWords ? scheduled.filter(p => !p.circuit.startsWith("entretien") || !p.words.every(word => monthlyWords.has(word))) : scheduled;
+  return {fresh, recent:pages.filter(p => !p.circuit.startsWith("entretien")),
+    revision:[...pages.filter(p => p.circuit.startsWith("entretien")), ...(monthlyReview ? [{...monthlyReview, afterLearning:true}] : []), ...milestoneStep, ...extras],
+    advice, returning, forecast, estimate:limited.estimate, budget, minutes, milestone, longerCycle, optionalWhole: monthly && !monthlyFits ? monthly : null};
+}
+
 const totalRevision = (p) => {
   const x = prog(p);
   return x.recent.length + x.revision.length;
@@ -344,6 +406,34 @@ function learningAppearance() {
         : null,
   };
 }
+const resolveQuran = id => findUnit("quran", id);
+const migrateReview = p => startReviewCircuits(migratePageState(p, pageIndex, resolveQuran, day()), day());
+const reviewCoverage = new WeakMap();
+function junctionContext(step, programme) {
+  if (programme.corpus !== "quran" || (step.circuit !== "liaison" && !step.circuit?.startsWith("entretien"))) return null;
+  const first = step.reviewPages[0];
+  const word = pageIndex[first.page-2]?.lines.at(-1)?.words.at(-1);
+  if (!word) return null;
+  const id = `${word.s}:${word.a}`;
+  if (first.ayahs.includes(id) || !programme.memo.items[id] || pendingSurahs(programme).has(String(word.s))) return null;
+  return resolveQuran(id)?.text;
+}
+function reviewPages() {
+  const step = session?.current;
+  if (step?.kind !== "review" || step.exerciseKind) return [];
+  if (step.reviewPages) return step.reviewPages;
+  if (session.corpus !== "quran") return [];
+  if (!reviewCoverage.has(step))
+    reviewCoverage.set(step, pageCoverage(step.ids, pageIndex, resolveQuran));
+  return reviewCoverage.get(step);
+}
+function currentPageReview() {
+  const pages = reviewPages();
+  if (!pages.length) return null;
+  const index = pages.findIndex(({page}) => !session.ratedPages?.includes(page));
+  return index < 0 ? null : {...pages[index], index, total: pages.length};
+}
+
 function readerSheets() {
   const units = displayUnits();
   const corpus = currentCorpus();
@@ -440,6 +530,7 @@ function render() {
   );
   layoutObserver?.disconnect();
   root.innerHTML = `<div class="shell ${view === "reader" ? "reading" : bookStudy ? "book-study" : wizardOpen ? "wizard-shell" : ""}">${view !== "reader" && !bookStudy && !wizardOpen ? masthead() : ""}${view === "home" ? home() : view === "finish-surah" ? finishSurahPage() : view === "library" ? library() : view === "programs" ? programs() : view === "new" ? newProgram() : view === "books" ? books.render() : view === "reader" ? readerView() : settings()}</div>${view !== "reader" && !bookStudy && !wizardOpen ? nav() : ""}`;
+  if (view === "new") guide().mountPicker();
   const nextVerseScroll = root.querySelector('.quran-verse-scroll');
   if (nextVerseScroll && !session) {
     mountVerseBook(nextVerseScroll, {
@@ -651,15 +742,36 @@ function reviewOptions(p) {
     sections: corpora[p.corpus].sections,
   };
 }
+const CIRCUIT_LABELS = {
+  ancrage:"Ancrage", reparation:"Réparation", liaison:"Liaison", "return-test":"Reprise · passage prioritaire",
+  entretien:"Entretien", "entretien-early":"Entretien",
+};
 function plannedReviews(p) {
   const x = prog(p);
+  if (p.corpus === "quran" || x.state) {
+    const steps = [];
+    for (const item of [...x.recent, ...x.revision]) {
+      if (!item.circuit) {
+        steps.push(item);
+        continue;
+      }
+      const previous = steps.at(-1);
+      if (item.circuit === "liaison" && previous?.circuit === "liaison" &&
+          previous.reviewPages.at(-1).page + 1 === item.page) {
+        steps[steps.length - 1] = {...previous,
+          ids:[...new Set([...previous.ids, ...item.units])], reviewPages:[...previous.reviewPages,item]};
+      } else {
+        steps.push({kind:"review", test:true, ids:item.units, circuit:item.circuit,
+          label:CIRCUIT_LABELS[item.circuit], reviewPages:[item]});
+      }
+    }
+    return steps;
+  }
   const steps = mergeReviewSteps(
     [...x.recent, ...x.revision],
     reviewOptions(p),
   );
-  return p.corpus === "quran"
-    ? steps
-    : steps.map((step) => ({
+  return steps.map((step) => ({
         ...step,
         dailyMatn: true,
         label: "Révision quotidienne · tout l’acquis",
@@ -798,13 +910,40 @@ function home() {
     )
     .join("")}</div>`;
 }
+function revisionDetails(programme) {
+  if (programme.corpus !== "quran") return "";
+  const plan = prog(programme);
+  const forecast = plan.forecast && `À ce rythme, l’estimation dépasse ton budget vers le juz ${plan.forecast.juz} (${plan.forecast.minutes} min/jour).`;
+  const milestone = plan.milestone;
+  const attrs = `data-id="${esc(programme.id)}"`;
+  return `${plan.advice ? `<p class="revision-advice" data-level="${plan.advice.color}">${esc(plan.advice.advice)} <small>≈ ${plan.estimate} min de révision · budget ${plan.budget} min</small></p>` : ""}
+    ${plan.estimate > plan.budget && plan.longerCycle && !programme.lightenRotation ? button(`Étaler l’entretien sur ${plan.longerCycle} jours`,"lighten-rotation","secondary block",attrs) : ""}
+    ${forecast ? `<p class="small muted">${esc(forecast)}</p>` : ""}
+    ${milestone ? `<p class="small"><strong>${esc(milestone.title)}</strong><br>${esc(milestone.detail)}</p>
+      ${programme.milestones?.[milestone.key] ? "" : button("Activer cette consolidation","enable-milestone","secondary block",attrs)}` : ""}
+    ${plan.advice?.color !== "green" && programme.memo.log.some(e=>e.kind==="learn") ? '<p class="small muted">Si tu peux, relis ta leçon ce soir avant de dormir.</p>' : ""}
+    ${plan.optionalWhole ? button("Réciter la sourate entière en plus","optional-whole-review","secondary block",attrs) : ""}
+    ${button("Carte de solidité","open-solidity","text",attrs)}
+    <dialog class="reader-menu solidity-dialog" id="solidity-${esc(programme.id)}">
+      <div class="spread"><h2>Carte de solidité</h2>${button("×","close-solidity","icon-btn",'aria-label="Fermer"')}</div>
+      <p class="small">Ancrage · Liaison · Entretien · Réparation</p>
+      ${solidityGrid(programme,esc)}
+      <form class="similar-verse-form form-card">
+        <input type="hidden" name="programme" value="${esc(programme.id)}">
+        <h3>Associer deux versets similaires</h3>
+        <div class="two-fields"><label>Premier verset<input name="first" placeholder="80:1" required></label><label>Second verset<input name="second" placeholder="81:1" required></label></div>
+        <button type="submit" class="btn secondary">Associer les versets</button>
+      </form>
+    </dialog>`;
+}
+
 function programCard(p) {
   const extra = canContinueToday(p);
   const canStart = !p.archived && hasDailyWork(p);
   const start = extra
     ? button("Continuer aujourd’hui " + icon("arrow"), "start-extra-lesson", "primary compact", `data-id="${esc(p.id)}"`)
     : canStart ? button("Continuer " + icon("arrow"), "start", "primary compact", `data-id="${esc(p.id)}"`) : "";
-  return `<article class="card program"><span class="tag">${esc(corpusName(corpora[p.corpus]))}${p.archived ? " · Archivé" : p.paused ? " · En pause" : ""}</span><h3>${esc(p.name)}</h3>${progress(p)}<div class="program-meta"><span>${esc(dailySummary(p))}</span>${p.goal ? `<span>Objectif le ${esc(formatDeadline(p.goal.date))}</span>` : ""}</div><div class="spread">${start}${button("Gérer", "edit", "text", `data-id="${esc(p.id)}"`)}</div></article>`;
+  return `<article class="card program"><span class="tag">${esc(corpusName(corpora[p.corpus]))}${p.archived ? " · Archivé" : p.paused ? " · En pause" : ""}</span><h3>${esc(p.name)}</h3>${progress(p)}<div class="program-meta"><span>${esc(dailySummary(p))}</span>${p.goal ? `<span>Objectif le ${esc(formatDeadline(p.goal.date))}</span>` : ""}</div><div class="spread">${start}${button("Gérer", "edit", "text", `data-id="${esc(p.id)}"`)}</div>${revisionDetails(p)}</article>`;
 }
 function library() {
   const isMatn = libraryCorpus !== "quran" && libraryCorpus !== "books";
@@ -856,9 +995,26 @@ function sectionRows(c, empty = false) {
       .join("") || (empty ? "" : '<p class="muted">Aucun passage trouvé.</p>')
   );
 }
+function validationCard(programmes) {
+  const rows = programmes.filter(p => p.corpus === "quran").flatMap(p =>
+    surahChecks(p).filter(s => s.status !== "corrected").map(s => ({...s, programme:p})));
+  if (!rows.length) return "";
+  return `<section class="card surah-checks"><h2>Réciter à quelqu’un</h2>
+    <p>Avant l’entretien, récite la sourate à une personne qui la connaît et qui peut corriger ta récitation et ton tajwid.</p>
+    ${rows.map(({id,name,status,programme}) => {
+      const attrs = `data-id="${esc(programme.id)}" data-surah="${esc(id)}"`;
+      return `<div class="surah-check"><strong>${esc(name)}</strong>
+        <small>${esc(programme.name)} · ${status === "pending" ? "En attente avant l’entretien" : "Déjà en entretien"}</small>
+        <p>As-tu récité cette sourate à une personne qui peut te corriger ?</p>
+        ${button("Oui, ma récitation a été vérifiée", "confirm-surah-check", "secondary block", attrs)}
+        ${status === "pending" ? button("Ajouter à l’entretien sans correction", "skip-surah-check", "text block", attrs) : ""}
+      </div>`;
+    }).join("")}</section>`;
+}
+
 function programs() {
   const g = programmeGroups(db.programs);
-  return `${title("Programmes")}<div class="section-head">${button("Créer un programme", "new", "primary block")}</div>${g.active.map(programCard).join("")}${g.paused.length ? `<details class="programme-fold"><summary>En pause · ${g.paused.length}</summary>${g.paused.map(programCard).join("")}</details>` : ""}${g.archived.length ? `<details class="programme-fold"><summary>Archivés · ${g.archived.length}</summary>${g.archived.map(programCard).join("")}</details>` : ""}${books.programCards()}`;
+  return `${title("Programmes")}<div class="section-head">${button("Créer un programme", "new", "primary block")}</div>${g.active.map(programCard).join("")}${validationCard(g.active)}${g.paused.length ? `<details class="programme-fold"><summary>En pause · ${g.paused.length}</summary>${g.paused.map(programCard).join("")}</details>` : ""}${g.archived.length ? `<details class="programme-fold"><summary>Archivés · ${g.archived.length}</summary>${g.archived.map(programCard).join("")}</details>` : ""}${books.programCards()}`;
 }
 
 let draft = {
@@ -928,7 +1084,7 @@ function applyPrior(p, form) {
   };
 }
 let programWizard;
-function guide(){return programWizard??=createProgramWizard({corpora,index:pageIndex,M,resolve:findUnit,today:day,refresh:render,onExit:()=>{view="programs";render();},onBooks:()=>books.chooseForProgram(),onSave:(p,start)=>{if(start&&p.corpus==="quran")p.memo=seedLongSurahs(p.memo,corpora.quran.sections,id=>findUnit("quran",id),day());if(db.programs.some(x=>x.id===p.id)){const previous=db.programs.find(x=>x.id===p.id);if(JSON.stringify(previous.goal)!==JSON.stringify(p.goal))forgetLesson(db,p.id);db.programs=db.programs.map(x=>x.id===p.id?p:x);}else db.programs.push(p);stateSave();editing=null;if(start)void startProgram(p.id).catch(e=>toast(e.message));else{view="programs";render();}toast("Programme enregistré.");}});}
+function guide(){return programWizard??=createProgramWizard({corpora,index:pageIndex,M,resolve:findUnit,today:day,refresh:render,onExit:()=>{view="programs";render();},onBooks:()=>books.chooseForProgram(),onSave:(p,start)=>{p=start?startReviewCircuits(seedProgrammeReview(p,pageIndex,resolveQuran,day()),day()):migrateReview(p);if(start&&p.corpus==="quran")p.memo=seedLongSurahs(p.memo,corpora.quran.sections,id=>findUnit("quran",id),day());if(db.programs.some(x=>x.id===p.id)){const previous=db.programs.find(x=>x.id===p.id);if(JSON.stringify(previous.goal)!==JSON.stringify(p.goal))forgetLesson(db,p.id);db.programs=db.programs.map(x=>x.id===p.id?p:x);}else db.programs.push(p);stateSave();editing=null;if(start)void startProgram(p.id).catch(e=>toast(e.message));else{view="programs";render();}toast("Programme enregistré.");}});}
 function newProgram() {
   return guide().render()+(editing?`<div class="qa-manage-actions">${button("Mettre en pause / réactiver","pause-program","secondary",`data-id="${editing}"`)}${button("Archiver","archive-program","secondary",`data-id="${editing}"`)}${button("Supprimer ce programme","delete-program","danger",`data-id="${editing}"`)}</div>`:"");
 }
@@ -955,9 +1111,15 @@ function currentUnits() {
         ? findUnit(session.corpus, id)
         : session.targets?.[id] || findUnit(session.corpus, id),
     );
-    return session.corpus === "quran" && session.current.kind === "review"
-      ? reviewRecitationUnits(units)
-      : units;
+    if (session.corpus !== "quran" || session.current.kind !== "review") return units;
+    if (!session.current.reviewPages) return reviewRecitationUnits(units);
+    const locations = new Map(session.current.reviewPages.flatMap(page =>
+      page.words.map(key => [key, page.page])));
+    return reviewRecitationUnits(units.map(unit => {
+      const wordRefs = unit.wordRefs.filter(word => locations.has(wordKey(word)));
+      const pages = [...new Set(wordRefs.map(word => locations.get(wordKey(word))))];
+      return {...unit, wordRefs, page:pages[0], pages};
+    }).filter(unit => unit.wordRefs.length));
   }
   if (reader.corpus === "quran" && verseMode()) {
     const units = pageVerseUnits(corpora.quran.sections, reader.page),
@@ -1017,6 +1179,7 @@ function readerView() {
     units = currentUnits(),
     s = section(corpus, !session ? reader.sid : units[0].id.split(":")[0]),
     sheets = readerSheets();
+  const pageReview = currentPageReview();
   reader.sheet = Math.max(0, Math.min(reader.sheet || 0, sheets.length - 1));
   const hidden = isHidden(),
     sheet = sheets[reader.sheet];
@@ -1051,6 +1214,22 @@ function readerView() {
           ? `Page ${sheet.page} · ${session ? (session.current.kind === "review" ? "révision" : "portion du jour") : "lecture libre"}`
           : `${unitName(corpora[corpus].unit)} ${units[0].n}${units.length > 1 ? "–" + units.at(-1).n : ""} · ${s.name}`,
       session: Boolean(session),
+      pageReview: pageReview && {
+        ...pageReview,
+        matn:corpus !== "quran",
+        unitName:corpora[corpus].unit,
+        unitNumber:units[0].n,
+        verses: pageReview.ayahs.map(id => ({
+          id,
+          text: corpus === "quran" ? resolveQuran(id)?.wordRefs.filter(w => pageReview.words.includes(wordKey(w))).map(w => w.text).join(" ") || "" : findUnit(corpus,id)?.text || "",
+        })),
+      },
+      repairTargets: pageReview?.circuit === "reparation" && corpus === "quran"
+        ? (session.program.pageState[pageReview.page]?.weakPoints || []).filter(id => pageReview.ayahs.includes(id)) : [],
+      junctionContext: session ? junctionContext(session.current,session.program) : null,
+      exerciseKind:session?.current.exerciseKind,
+      comparison:session?.current.exerciseKind === "similar" ? units.map(u=>u.text) : null,
+      exercisePrompt:session?.current.exerciseKind === "random" ? units[0].text.split(/\s+/).slice(0,3).join(" ") : "",
       exitSummary: session ? lessonExitSummary(session) : "",
       mushaf: printedLearning(),
       matnLyrics: !session && corpus !== "quran",
@@ -1073,7 +1252,7 @@ function readerView() {
       stepTitle: session?.current.dailyMatn
         ? `Récite ${units.length > 1 ? "les" : "le"} ${corpora[corpus].unit}${units.length > 1 && corpora[corpus].unit !== "vers" ? "s" : ""} ${units[0].n}${units.length > 1 ? " à " + units.at(-1).n : ""}`
         : session?.current.kind === "review"
-          ? reviewRangeLabel(units, reviewOptions(session.program))
+          ? [((session.current.circuit || session.current.exerciseKind) && session.current.label), reviewRangeLabel(units, reviewOptions(session.program))].filter(Boolean).join(" · ")
           : session?.current.label,
       practiceKind: session?.current.practiceKind || session?.current.kind,
       stepIndex: session?.index || 0,
@@ -1204,7 +1383,7 @@ function reminderItems(at = new Date()) {
   const date = localDay(at);
   const memo = db.programs.map((p) => {
     const x = programmePlan(p, date);
-    const ids = [...x.recent, ...x.revision].flatMap((b) => b.ids || []),
+    const ids = [...x.recent, ...x.revision].flatMap((b) => b.ids || b.units || []),
       id = ids[0] || x.fresh[0];
     const name =
       p.corpus === "quran" && id
@@ -1246,7 +1425,7 @@ function settings() {
   const appearance = `<section class="card form-card"><h2>Apparence</h2><label>Thème<select id="appearance">${options.map(([value, label]) =>
     `<option value="${value}" ${selected === value ? "selected" : ""}>${label}</option>`,
   ).join("")}</select></label></section>`;
-  return `${title("Mon espace")}${appearance}${reminderPanel()}<section class="card"><span class="tag">HORS CONNEXION</span><h2>Hors connexion</h2>${button("Préparer l’accès hors connexion", "offline", "primary block", offlineBusy ? "disabled" : "")}<p id="offline-progress" class="small muted"></p><p class="small muted">Pour le Coran, télécharge les audios des passages souhaités depuis la lecture.</p></section><section class="card form-card">${modelPicker(db.settings.recognitionModel)}<p class="small muted">Le modèle 3.1 fonctionne sur cet appareil.</p><h2>Audio</h2><label>Récitateur<select id="reciter">${[
+  return `${title("Mon espace")}${appearance}<form id="revision-budget" class="card form-card"><h2>Temps de révision</h2><label>Minutes par jour<input type="number" name="minutes" min="5" max="240" required value="${reviewMinutes(db.settings.reviewMinutes)}"></label><button class="btn secondary" type="submit">Enregistrer</button></form>${reminderPanel()}<section class="card"><span class="tag">HORS CONNEXION</span><h2>Hors connexion</h2>${button("Préparer l’accès hors connexion", "offline", "primary block", offlineBusy ? "disabled" : "")}<p id="offline-progress" class="small muted"></p><p class="small muted">Pour le Coran, télécharge les audios des passages souhaités depuis la lecture.</p></section><section class="card form-card">${modelPicker(db.settings.recognitionModel)}<p class="small muted">Le modèle 3.1 fonctionne sur cet appareil.</p><h2>Audio</h2><label>Récitateur<select id="reciter">${[
     ["minshawi", "Minshawi · murattal"],
     ["husary", "Husary · murattal"],
     ["alafasy", "Mishary Alafasy"],
@@ -1274,7 +1453,7 @@ function settings() {
           })
           .join("")
       : '<p class="muted">Une étoile dans la lecture, et tu retrouves ton passage ici.</p>'
-  }</section><details class="card"><summary>À propos du suivi vocal</summary><p class="small muted">Sakina.me · version 1.33.3</p><p>Zipformer Quran v3.1 · Quran Lab, via ReciteQuran et le moteur local sherpa-onnx. Reconnaissance des phonèmes en Hafs. Retours expérimentaux, sans validation automatique du tajwid.</p><p>Application personnelle et gratuite. Aucune publicité, aucun compte, aucun envoi d’audio.</p><a href="vendor/LICENSE-ReciteQuran.txt">Conditions ReciteQuran</a> · <a href="THIRD_PARTY_NOTICES.txt">Sources et licences</a></details>`;
+  }</section><details class="card"><summary>À propos du suivi vocal</summary><p class="small muted">Sakina.me · version 1.34.0</p><p>Zipformer Quran v3.1 · Quran Lab, via ReciteQuran et le moteur local sherpa-onnx. Reconnaissance des phonèmes en Hafs. Retours expérimentaux, sans validation automatique du tajwid.</p><p>Application personnelle et gratuite. Aucune publicité, aucun compte, aucun envoi d’audio.</p><a href="vendor/LICENSE-ReciteQuran.txt">Conditions ReciteQuran</a> · <a href="THIRD_PARTY_NOTICES.txt">Sources et licences</a></details>`;
 }
 async function resetVoice() {
   errorStreak.reset();
@@ -1598,23 +1777,31 @@ async function startProgram(id, mode = "daily") {
   if (restored) {
     stopPlayback();
     await resetVoice();
-    session = regroupRemainingReviews(restored, reviewOptions(p));
+    session = restored.ratedPages?.length || restored.steps.some(step => step.circuit || step.afterLearning || step.exerciseKind) ? restored : regroupRemainingReviews(restored, reviewOptions(p));
     session.returnView = view === "reader" ? "home" : view;
+    session.reviewStartedAt = Date.now();
     reader.hidden = checkpoint.hidden;
     reader.reveal = checkpoint.reveal;
     reader.sheet = checkpoint.sheet;
+    const nextReview = currentPageReview();
+    if (nextReview) {
+      const sheet = readerSheets().findIndex(entry => entry.page === nextReview.page);
+      if (sheet >= 0) reader.sheet = sheet;
+    }
     reader.revealedAyahs = checkpoint.revealedAyahs || [];
     reader.followId = checkpoint.followId || null;
     view = "reader";
     db.lastDaily = { type: "memorisation", id };
     stateSave();
     render();
+    if (verseMode() && nextReview) scrollToPageReview(nextReview);
     return;
   }
   if (mode === "daily" && canContinueToday(p)) mode = "extra";
   const ending = mode === "ending" ? finishSurahOffer(p) : null;
   const extra = mode === "extra" && canContinueToday(p);
   const dailyPlan = mode === "daily" ? prog(p) : null;
+  const optionalWhole = mode === "whole-review" ? prog(p).optionalWhole : null;
   const proposed = extra ? extraLessonUnits(p, day(), M) : [];
   const additional = p.corpus === "quran" ? quranLessonPortion(proposed, corpora.quran.sections) : proposed;
   const fresh = ending?.ids || dailyPlan?.fresh || additional;
@@ -1649,24 +1836,25 @@ async function startProgram(id, mode = "daily") {
       test: step.kind === "test",
     });
   }
-  if (includeReviews) steps.push(...plannedReviews(p));
-  steps.splice(
-    0,
-    steps.length,
-    ...orderedLessonSteps(
-      steps.filter((s) => s.kind === "review"),
-      steps.filter((s) => s.kind === "new"),
-    ),
-  );
+  if (includeReviews) {
+    const reviews = plannedReviews(p);
+    const after = reviews.filter(step => step.afterLearning || step.circuit?.startsWith("entretien"));
+    const before = reviews.filter(step => !after.includes(step));
+    steps.splice(0, steps.length, ...orderedLessonSteps(before, steps), ...after);
+  }
+  if (optionalWhole) steps.push(optionalWhole);
   if (!steps.length) {
     toast("Ta séance est terminée pour aujourd’hui.");
     return;
   }
   stopPlayback();
   await resetVoice();
+  const returning = dailyPlan?.returning;
+  if (returning && p.returnStartedOn !== returning.start) p.returnStartedOn = returning.start;
   session = {
     program: p,
     returnView: view === "reader" || finishSurah ? "home" : view,
+    reviewStartedAt:Date.now(),
     corpus: p.corpus,
     targets: byId,
     portionIds: fresh,
@@ -1705,6 +1893,7 @@ function stopPlayback() {
   centerMushafVerse(null);
 }
 async function listen(units = currentUnits(), extra = false, options = {}) {
+  if (session?.current.kind === "review") session.reviewAudioUsed = true;
   if(!session)freeAudioLoading=true;
   const token = ++listenRun,
     lesson = session,
@@ -1948,7 +2137,18 @@ function followLearningTime(id, time, duration) {
 async function advanceMastered() {
   const p = session.program,
     step = session.current;
-  if (step.kind === "review") {
+  p.lastStudyOn = day();
+  planCache.delete(p);
+  if (step.exerciseKind === "milestone") p.lastMilestoneOn = day();
+  if (step.exerciseKind === "random" && session.exerciseMissed) {
+    const id = step.ids[0], coverage = pageCoverage([id],pageIndex,resolveQuran);
+    const result = commitPageReviews(p,coverage.map(page=>({...page,rating:"mistake",verses:[id],circuit:"weekly"})),day(),crypto.randomUUID());
+    p.pageState = result.pageState;
+  }
+  session.exerciseMissed = false;
+  if (step.exerciseKind && ["junction","random","similar"].includes(step.exerciseKind) &&
+      !session.steps.slice(session.index+1).some(next => ["junction","random","similar"].includes(next.exerciseKind))) p.lastWeeklyOn = day();
+  if (step.kind === "review" && !step.exerciseKind) {
     p.memo = M.review(p.memo, step.ids, "good", day());
     if (p.corpus === "quran")
       for (const rotation of step.macroRotations || [step.macroRotation]) {
@@ -1958,13 +2158,34 @@ async function advanceMastered() {
   }
   if (step.kind === "new" && step.test && session.endsAtSurahBoundary)
     p.finishedSurahLessonOn = day();
-  if (step.kind === "new" && step.test){const before=p.memo;p.memo=M.learn(p.memo,session.portionIds,day());if(p.corpus==='quran'){p.memo=registerLongCompletion(before,p.memo,corpora.quran.sections,id=>findUnit('quran',id),day());const whole=completionReview(p.memo,corpora.quran.sections,id=>findUnit('quran',id));if(whole)session.steps.splice(session.index+1,0,whole);}}
+  if (step.kind === "new" && step.test) {
+    const before = p.memo;
+    p.memo = M.learn(before, session.portionIds, day());
+    if (p.corpus === "quran") {
+      p.pageState = addLearnedPages(p, session.portionIds, pageIndex, resolveQuran, day()).pageState;
+      p.memo = registerLongCompletion(before, p.memo, corpora.quran.sections, resolveQuran, day());
+      const previousLesson = before.log.filter(e => e.kind === "learn" && e.date < day()).at(-1);
+      const previous = previousLesson?.ids?.at(-1);
+      const next = session.portionIds[0];
+      if (previous && next && !previous.startsWith("p") && !next.startsWith("p")) {
+        const [sid,n] = previous.split(":");
+        if (next === `${sid}:${Number(n)+1}`)
+          session.steps = [...session.steps.slice(0,session.index+1),
+            {ids:[previous,next],kind:"review",test:true,exerciseKind:"new-junction",label:"Relier les deux leçons"},
+            ...session.steps.slice(session.index+1)];
+      }
+      const alreadyComplete = pendingSurahs({...p, memo:before});
+      if ([...pendingSurahs(p)].some(id => !alreadyComplete.has(id)))
+        session.newSurahToCheck = true;
+    }
+  }
   stateSave();
   session.index++;
   if (session.index >= session.steps.length) {
     forgetLesson(db, p.id);
     stateSave();
     const wasEnding = session.finishSurah;
+    const newSurahToCheck = session.newSurahToCheck;
     session = null;
     if (!wasEnding && finishSurahOffer(p)) {
       openFinishSurah(p);
@@ -1972,10 +2193,15 @@ async function advanceMastered() {
     }
     view = "home";
     render();
-    toast(wasEnding ? "Sourate terminée. Les révisions sont prévues." : "Séance terminée. Les révisions sont prévues.");
+    toast(newSurahToCheck ? "Sourate terminée. Va dans Programmes → Réciter à quelqu’un."
+      : wasEnding ? "Sourate terminée. Les révisions sont prévues." : "Séance terminée. Les révisions sont prévues.");
     return;
   }
   session.current = session.steps[session.index];
+  session.pageReviewId = null;
+  session.ratedPages = [];
+  session.reviewStartedAt = Date.now();
+  session.reviewAudioUsed = false;
   session.listened = 0;
   session.listenTarget = listeningGoal(p.memo.repeat);
   session.audioRunning = false;
@@ -1987,9 +2213,135 @@ async function advanceMastered() {
   render();
   if (session.phase === "listen" && lessonOptions().needsAudio) await listen();
 }
+let ratingInProgress = false;
+async function recordPageRating(rating, source = "seul") {
+  const lesson = session, coverage = currentPageReview();
+  if (!coverage || !Object.hasOwn(PAGE_RATINGS, rating) || ratingInProgress) return;
+  ratingInProgress = true;
+  const verses = Array.from(root.querySelectorAll("#page-review-verses input:checked"), el => el.value);
+  const selectedPage = root.querySelector("#page-review-verses")?.dataset.page;
+  try {
+    stopPlayback();
+    await resetVoice();
+    if (session !== lesson) return;
+    const eventId = lesson.pageReviewId || crypto.randomUUID();
+    const date = day();
+    const note = {date,eventId,source,circuit:lesson.current.circuit,rating,
+      verses:Number(selectedPage) === coverage.page ? verses : []};
+    const wordCount = lesson.corpus === "quran" ? pageIndex[coverage.page-1].lines.reduce((sum,line)=>sum+line.words.length,0) : 0;
+    const elapsed = (Date.now() - (lesson.reviewStartedAt || Date.now())) / 60000;
+    const measured = source === "seul" && !lesson.reviewAudioUsed && elapsed >= .12 && elapsed <= 20 && wordCount
+      ? elapsed * wordCount / (coverage.words.length * (coverage.repetitions || 1)) : 0;
+    const updated = {...(lesson.corpus === "quran"
+      ? commitPageReviews(lesson.program,[{...coverage,...note,minutesPerPage:measured,
+        budgetCost:wordCount ? pageMinutes(lesson.program.pageState)*coverage.words.length/wordCount*(coverage.repetitions||1) : 0}],date,eventId)
+      : rateMatnPortion(lesson.program,circuitMatnPlan(lesson.program,date,M,id=>findUnit(lesson.corpus,id)).state[coverage.page],coverage,note)),lastStudyOn:date};
+    const ratedPages = [...(lesson.ratedPages || []), coverage.page];
+    const nextPage = reviewPages().find(({page}) => !ratedPages.includes(page));
+    const nextSheet = nextPage ? Math.max(0, readerSheets().findIndex(sheet => sheet.page === nextPage.page)) : reader.sheet;
+    const nextLesson = {...lesson, program: updated, pageReviewId: eventId, ratedPages,reviewStartedAt:Date.now(),reviewAudioUsed:false};
+    const nextDb = {...db, programs: db.programs.map(p => p.id === updated.id ? updated : p)};
+    rememberLesson(nextDb, lessonCheckpoint(nextLesson, {...reader, sheet: nextSheet}, day()));
+    save(nextDb);
+    db = nextDb;
+    session = nextLesson;
+    reader.sheet = nextSheet;
+    if (nextPage) {
+      render();
+      if (verseMode()) scrollToPageReview(nextPage);
+    } else await advanceMastered();
+  } finally {
+    ratingInProgress = false;
+  }
+}
+function scrollToPageReview(coverage) {
+  if (!coverage) return;
+  const target = verseMode()
+    ? root.querySelector(`[data-verse-key="${CSS.escape(coverage.ayahs[0])}"]`)
+    : root.querySelector(`.printed-page[data-page="${coverage.page}"]`);
+  const scroller = verseMode() ? root.querySelector(".quran-verse-scroll") : root.querySelector("#reader-stage");
+  if (target && scroller)
+    scroller.scrollTop += target.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+}
 async function action(el) {
   if(el.dataset.guide){guide().action(el);return;}
   const a = el.dataset.action;
+  if (a === "confirm-surah-check" || a === "skip-surah-check") {
+    const programme = db.programs.find(p => p.id === el.dataset.id && p.corpus === "quran");
+    const surah = programme && surahChecks(programme).find(s => s.id === el.dataset.surah);
+    if (!surah) return;
+    const corrected = a === "confirm-surah-check";
+    if (!corrected && !confirm(`Ajouter ${surah.name} à l’entretien ? Tu pourras toujours la faire corriger plus tard.`)) return;
+    const updated = markSurahCheck(programme, surah.id, corrected ? "corrected" : "continue-alone", day());
+    const next = {...db, programs:db.programs.map(p => p === programme ? updated : p)};
+    save(next);
+    db = next;
+    render();
+    toast(corrected ? "Récitation marquée comme corrigée." : "Sourate ajoutée à l’entretien.");
+    return;
+  }
+  if (a === "rate-page") {
+    await recordPageRating(el.dataset.rating, root.querySelector("#page-review-source")?.value || "seul");
+    return;
+  }
+  if (a === "exercise-missed" && session?.current.exerciseKind === "random") {
+    stopPlayback();
+    await resetVoice();
+    session.exerciseMissed = true;
+    await advanceMastered();
+    return;
+  }
+  if (a === "prayer-review") {
+    await recordPageRating("clean","priere");
+    return;
+  }
+  if (a === "open-solidity") {
+    root.querySelector("#solidity-" + CSS.escape(el.dataset.id))?.showModal();
+    return;
+  }
+  if (a === "close-solidity") {
+    el.closest("dialog")?.close();
+    return;
+  }
+  if (a === "lighten-rotation") {
+    db = {...db,programs:db.programs.map(p => p.id === el.dataset.id ? {...p,lightenRotation:true} : p)};
+    stateSave();
+    render();
+    return;
+  }
+  if (a === "optional-whole-review") {
+    await startProgram(el.dataset.id,"whole-review");
+    return;
+  }
+  if (a === "enable-milestone") {
+    const p = db.programs.find(p => p.id === el.dataset.id);
+    const milestone = p && prog(p).milestone;
+    if (milestone) {
+      db = {...db,programs:db.programs.map(item => item === p ? {...p,milestones:{...p.milestones,[milestone.key]:day()}} : item)};
+      stateSave();
+      render();
+    }
+    return;
+  }
+  if (a === "mark-page-verses") {
+    const dialog = root.querySelector("#page-review-verses");
+    if (dialog && !dialog.dataset.prefilled) {
+      const words = currentUnits().flatMap(unit => unit.wordRefs || []);
+      const flagged = new Set(words.filter((_,i) => voice.result?.words[i]?.status === "check").map(w => `${w.s}:${w.a}`));
+      for (const box of dialog.querySelectorAll("input[type=checkbox]")) if (flagged.has(box.value)) box.checked = true;
+      dialog.dataset.prefilled = "1";
+    }
+    dialog?.showModal();
+    return;
+  }
+  if (a === "close-page-verses") {
+    root.querySelector("#page-review-verses")?.close();
+    return;
+  }
+  if (a === "show-page-to-rate") {
+    if (session?.corpus === "quran") scrollToPageReview(currentPageReview());
+    return;
+  }
   if (a === "reminder-test") {
     await reminders.test();
     toast("Rappel de test prévu dans 5 secondes.");
@@ -2344,7 +2696,7 @@ async function action(el) {
         if (p.corpus === "quran")
           memo = registerLongCompletion(p.memo, memo, corpora.quran.sections, id => findUnit("quran", id), date);
       }
-      const updated = { ...p, memo, endedEarlyOn: date };
+      const updated = { ...addLearnedPages(p, ids, pageIndex, resolveQuran, date), memo, endedEarlyOn: date, ...(ids.length ? {lastStudyOn:date} : {}) };
       const next = { ...db, programs: db.programs.map(program => program.id === p.id ? updated : program) };
       forgetLesson(next, p.id);
       try {
@@ -2937,7 +3289,7 @@ root.addEventListener("change", async (e) => {
       const next = validateBackup(JSON.parse(await el.files[0].text()));
       if (confirm("Remplacer les programmes actuels par cette sauvegarde ?")) {
         await books.persist(next.bookStudy);
-        db = next;
+        db = {...next, programs: next.programs.map(migrateReview)};
         await books.init();
         db.settings = {
           reciter: "minshawi",
@@ -2967,6 +3319,30 @@ root.addEventListener("change", async (e) => {
   }
 });
 root.addEventListener("submit", async (e) => {
+  if (e.target.id === "revision-budget") {
+    e.preventDefault();
+    db.settings.reviewMinutes = reviewMinutes(new FormData(e.target).get("minutes"));
+    db.programs.forEach(p => planCache.delete(p));
+    stateSave();
+    render();
+    return;
+  }
+  if (e.target.matches(".similar-verse-form")) {
+    e.preventDefault();
+    const data = new FormData(e.target);
+    const ids = ["first","second"].map(key => String(data.get(key)).trim());
+    const p = db.programs.find(p => p.id === data.get("programme") && p.corpus === "quran");
+    if (!p || ids[0] === ids[1] || !ids.every(id => resolveQuran(id) && p.memo.items[id])) {
+      toast("Choisis deux versets différents déjà appris, au format 80:1.");
+      return;
+    }
+    const pairs = p.similarVerses || [];
+    if (!pairs.some(pair => ids.every(id => pair.includes(id))))
+      db = {...db,programs:db.programs.map(item=>item===p ? {...p,similarVerses:[...pairs,ids]} : item)};
+    stateSave();
+    render();
+    return;
+  }
   if (e.target.id === "reminders-form") {
     e.preventDefault();
     const form = e.target,
@@ -3067,7 +3443,7 @@ root.addEventListener("submit", async (e) => {
       ? db.programs.find((p) => p.id === editing)
       : db.programs.at(-1);
     const updated = applyPrior(target, form);
-    db.programs = db.programs.map((p) => (p.id === target.id ? updated : p));
+    db.programs = db.programs.map((p) => (p.id === target.id ? migrateReview(updated) : p));
     stateSave();
     editing = null;
     view = "programs";
@@ -3101,6 +3477,7 @@ document.addEventListener("visibilitychange", () => {
 });
 try {
   await loadData();
+  db = {...db, programs: db.programs.map(migrateReview)};
   await books.init();
   db.settings.reminders = reminderSettings(db.settings.reminders);
   db.settings.reminderLastSeen = Date.now();

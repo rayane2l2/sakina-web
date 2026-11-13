@@ -9,8 +9,8 @@ function groups(state,sections,resolve){const known=state.units.filter(id=>state
 export function seedLongSurahs(state,sections,resolve,date){const registry={...state.longSurahs};for(const g of groups(state,sections,resolve))if(g.complete&&g.pages.length>=2&&!registry[g.sid])registry[g.sid]={completedOn:date,nextWhole:nextMonth(date),completionPending:false};return {...state,longSurahs:registry};}
 export function registerLongCompletion(before,after,sections,resolve,date){const previous=new Set(groups(before,sections,resolve).filter(g=>g.complete).map(g=>g.sid)),registry={...after.longSurahs};for(const g of groups(after,sections,resolve))if(g.complete&&g.pages.length>=2&&!previous.has(g.sid))registry[g.sid]={completedOn:date,nextWhole:date,completionPending:true};return {...after,longSurahs:registry};}
 export function completeQuranRotation(state,rotation,date){if(!rotation||rotation.kind!=='bounded-consolidation')return state;const done=doneOn(state,date);if(!rotation.ids.every(id=>done.has(id)))return state;const next={...state,consolidationDate:date,consolidationKey:rotation.key};if(rotation.wholeLong)next.longSurahs={...state.longSurahs,[rotation.sid]:{...state.longSurahs?.[rotation.sid],completedOn:state.longSurahs?.[rotation.sid]?.completedOn||date,nextWhole:nextMonth(date),completionPending:false}};return next;}
-export function completionReview(state,sections,resolve){const group=groups(state,sections,resolve).find(g=>state.longSurahs?.[g.sid]?.completionPending);if(!group)return null;return {ids:group.ids,kind:'review',test:true,label:'Récitation complète · '+group.section.name,macroRotation:{kind:'bounded-consolidation',key:'whole:'+group.sid,sid:group.sid,wholeLong:true,ids:group.ids}};}
-export function boundedQuranPlan(state,date,M,{sections,resolve}){
+export function completionReview(state,sections,resolve,eligible=()=>true){const group=groups(state,sections,resolve).find(g=>eligible(g.sid)&&state.longSurahs?.[g.sid]?.completionPending);if(!group)return null;return {ids:group.ids,kind:'review',test:true,label:'Récitation complète · '+group.section.name,macroRotation:{kind:'bounded-consolidation',key:'whole:'+group.sid,sid:group.sid,wholeLong:true,ids:group.ids}};}
+export function boundedQuranPlan(state,date,M,{sections,resolve,onlyWhole=false,eligibleWhole=()=>true}){
  const fresh=M.nextNew(state,date),knownGroups=groups(state,sections,resolve),knownIds=new Set(state.units.filter(id=>state.items[id])),done=doneOn(state,date);
  const lessons=state.log.filter(e=>e.kind==='learn'&&e.source!=='import-recent').map(e=>e.ids||state.units.filter(id=>state.items[id]?.first===e.date)).filter(ids=>ids.length).slice(-3);
  const recent=new Set(lessons.flat().filter(id=>knownIds.has(id))),active=fresh[0]&&resolve(fresh[0]),activeSid=String(active?.wordRefs?.[0]?.s||active?.id.split(':')[0]||'');
@@ -20,6 +20,7 @@ export function boundedQuranPlan(state,date,M,{sections,resolve}){
  if(state.consolidationDate!==date)for(const g of knownGroups){
   // A finished long surah leaves the page rotation. Its monthly task includes the entire surah.
   if(g.complete&&g.pages.length>=2){
+   if(!eligibleWhole(g.sid))continue;
    const latest=g.ids.map(id=>state.items[id].learned||state.items[id].first).sort().at(-1)||date;
    const meta=state.longSurahs?.[g.sid]||{nextWhole:nextMonth(latest)};
    if(meta.nextWhole<=date&&!g.ids.every(id=>done.has(id))){
@@ -27,6 +28,7 @@ export function boundedQuranPlan(state,date,M,{sections,resolve}){
    }
    continue;
   }
+  if(onlyWhole)continue;
   const ids=g.ids.filter(id=>!recent.has(id)&&!done.has(id));
   if(!ids.length)continue;
   if(g.pages.length<2){const due=ids.map(id=>state.items[id].due||date).sort()[0];if(due<=date)candidates.push({key:'surah:'+g.sid,sid:g.sid,ids,due,priority:2});}

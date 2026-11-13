@@ -28,6 +28,8 @@ export function lessonCheckpoint(session, reader, date) {
     reveal: reader.reveal,
     revealedAyahs: reader.revealedAyahs || [],
     followId: reader.followId || null,
+    ...(session.newSurahToCheck ? {newSurahToCheck:true} : {}),
+    ...(session.pageReviewId ? {pageReviewId: session.pageReviewId, ratedPages: session.ratedPages} : {}),
   };
 }
 export function restoreLesson(checkpoint, program, date) {
@@ -69,6 +71,9 @@ export function restoreLesson(checkpoint, program, date) {
     listenTarget: Math.max(0, Number(c.listenTarget) || 0),
     phase: c.phase === "recite" ? "recite" : "listen",
     audioRunning: false,
+    pageReviewId: c.pageReviewId || null,
+    ratedPages: Array.isArray(c.ratedPages) ? c.ratedPages : [],
+    newSurahToCheck: Boolean(c.newSurahToCheck),
   };
 }
 

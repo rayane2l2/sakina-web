@@ -229,6 +229,51 @@ body.wizard-open { overflow: hidden; }
   overscroll-behavior: contain;
   padding: 2px 4px 10px;
 }
+.wizard-shell .guide-content-mushaf {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  gap: 7px;
+}
+.guide-content-mushaf .guide-mushaf-instruction {
+  margin: 0;
+  font-size: clamp(19px, 4.6vw, 25px);
+  line-height: 1.25;
+  font-weight: 800;
+  text-align: center;
+}
+.guide-content-mushaf .guide-mushaf { flex: 1; min-height: 0; }
+.guide-content-mushaf > label { margin: 0; flex: none; }
+.page-rating-heading, .page-rating-choices { display: grid; gap: 6px; grid-template-columns: 1fr 1fr; }
+.page-rating-heading .btn { min-height: 32px; padding: 3px; color: var(--text, inherit); }
+.page-rating-heading .btn:first-child { text-align: start; }
+.revision-advice { border-inline-start: 4px solid #18744b; padding-inline-start: 8px; }
+.revision-advice[data-level="orange"] { border-color:#b75e00; }
+.revision-advice[data-level="red"] { border-color:#b42936; }
+.revision-advice small { display:block; }
+.solidity-dialog { max-height:85dvh; overflow:auto; }
+.solidity-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(28px,1fr)); gap:4px; }
+.solidity-cell { display:grid; place-items:center; min-height:28px; background:var(--soft,#f2f4f6); border:1px solid #aab6c5; border-radius:4px; font-size:10px; }
+.solidity-cell.ancrage { background:#e8ebfd; color:#263576; }
+.solidity-cell.liaison { background:#d9ecfb; color:#103e63; }
+.solidity-cell.entretien { background:#d8f0dc; color:#17492c; }
+.solidity-cell.reparation { background:#ffe3d9; color:#76260d; }
+.similar-comparison { display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:12px; text-align:center; }
+.similar-comparison p { font-size:clamp(18px,4.8vw,28px); line-height:1.8; }
+.review-exercise-prompt { margin:0; text-align:center; font-size:23px; }
+.review-source { display:inline-flex; flex-direction:row; align-items:center; gap:5px; font-size:12px; }
+.review-source select { width:auto; padding:1px 4px; min-height:24px; }
+.surah-checks p { margin-block: 6px 12px; }
+.surah-check { display: grid; gap: 6px; padding-block: 12px; border-top: 1px solid var(--line, #dce4ef); }
+.surah-check small { opacity: .85; }
+.surah-check .btn { margin: 0; }
+.page-rating-repeat { margin: 0 0 5px; text-align: center; font-size: 12px; }
+.page-rating-choices .btn { min-height: 37px; padding: 4px; }
+.page-rating-verses { max-height: min(50dvh, 430px); overflow: auto; }
+.page-rating-verses label { display: flex; flex-direction: row; align-items: center; gap: 12px; padding: 6px 0; }
+.page-rating-verses input { width: 19px; height: 19px; flex: none; }
+.page-rating-verses label > span { flex: 1; display: grid; gap: 4px; }
+.page-rating-verses [lang="ar"] { font-size: 24px; line-height: 1.7; }
 .wizard-shell .guide-content .qa-choice-list { max-height: none; overflow: visible; }
 .wizard-shell .guide-choice { min-height: 54px; margin: 9px 0; padding: 10px 14px; }
 .wizard-shell .guide-choice strong { font-size: clamp(14px, 3.8vw, 17px); }

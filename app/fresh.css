@@ -1,0 +1,632 @@
+/* Sakina — new look for the browsing screens (home, map, library, programmes, settings).
+   Everything is scoped to .app-screen, so the reader, the Mushaf, book study and the wizard keep their own styles.
+   Loaded last: some rules repeat !important only where older sheets force a value with !important. */
+
+:root {
+  --f-bg: #f3f6fe;
+  --f-bg-glow: #e4e9ff;
+  --f-surface: #ffffff;
+  --f-surface-2: #eef2ff;
+  --f-line: #e0e6f5;
+  --f-ink: #121a33;
+  --f-muted: #5d6987;
+  --f-brand: #3355ff;
+  --f-brand-deep: #2036c4;
+  --f-brand-soft: #e5eaff;
+  --f-brand-press: #cbd5ff;
+  --f-violet: #7a4dff;
+  --f-gold: #ffb61f;
+  --f-gold-deep: #cf8700;
+  --f-gold-soft: #fff1cf;
+  --f-mint: #14c17c;
+  --f-mint-deep: #0b9660;
+  --f-coral: #ff6a55;
+  --f-action: #3355ff;
+  --f-coral-strong: #d9452f;
+  --f-mint-strong: #0b8a55;
+  --f-hero-a: #3355ff;
+  --f-hero-b: #7a4dff;
+  --f-lift: 0 4px 0 var(--f-line);
+  --f-float: 0 12px 32px rgba(18, 26, 51, 0.12);
+  --f-radius: 24px;
+
+  /* Gamification components follow the same palette. */
+  --play-brand: var(--f-brand);
+  --play-brand-deep: var(--f-brand-deep);
+  --play-brand-soft: var(--f-brand-soft);
+  --play-gold: var(--f-gold);
+  --play-gold-deep: var(--f-gold-deep);
+  --play-gold-soft: var(--f-gold-soft);
+  --play-solid: var(--f-mint);
+  --play-repair: var(--f-coral);
+  --play-card: var(--f-surface);
+  --play-line: var(--f-line);
+  --play-ink: var(--f-ink);
+  --play-muted: var(--f-muted);
+}
+:root[data-theme="dark"] {
+  --f-bg: #0a0f1f;
+  --f-bg-glow: #18234a;
+  --f-surface: #141c35;
+  --f-surface-2: #1b2547;
+  --f-line: #27325a;
+  --f-ink: #eef2ff;
+  --f-muted: #9ea9cb;
+  --f-brand: #6b86ff;
+  --f-brand-deep: #3a52d4;
+  --f-brand-soft: #1f2b58;
+  --f-brand-press: #17204a;
+  --f-violet: #9a78ff;
+  --f-gold: #ffc443;
+  --f-gold-deep: #b57800;
+  --f-gold-soft: #3b2f12;
+  --f-mint: #2fd292;
+  --f-mint-deep: #13915f;
+  --f-coral: #ff8a76;
+  --f-action: #4560e8;
+  --f-coral-strong: #c9402b;
+  --f-mint-strong: #0d8050;
+  --f-hero-a: #3149d1;
+  --f-hero-b: #6a3fe0;
+  --f-lift: 0 4px 0 #070b18;
+  --f-float: 0 14px 36px rgba(0, 0, 0, 0.45);
+}
+
+/* Older sheets read these names: point them at the new palette.
+   The Mushaf keeps its own --mushaf-* colours and its paper backgrounds. */
+:root {
+  --bg: var(--f-bg);
+  --surface: var(--f-surface);
+  --ink: var(--f-ink);
+  --muted: var(--f-muted);
+  --line: var(--f-line);
+  --accent: var(--f-action);
+  --soft: var(--f-brand-soft);
+  --sage: var(--f-action);
+  --sage-light: var(--f-brand-soft);
+}
+:root[data-theme="dark"] {
+  --bg: var(--f-bg);
+  --surface: var(--f-surface);
+  --line: var(--f-line);
+  --soft: var(--f-brand-soft);
+  --sage: var(--accent);
+  --surface-raised: var(--f-surface-2);
+  --accent: #a9b9ff;
+  --muted: var(--f-muted);
+  --ink: var(--f-ink);
+  --action-surface: var(--f-action);
+  --focus-surface: #2a3a78;
+}
+
+/* ---------- Page ---------- */
+body {
+  background:
+    radial-gradient(120% 60% at 50% -10%, var(--f-bg-glow), transparent 70%),
+    var(--f-bg) !important;
+  color: var(--f-ink);
+  min-height: 100vh;
+}
+html { background: var(--f-bg) !important; }
+body.reader-open, body.book-study-open { background: var(--f-bg) !important; }
+.app-screen { color: var(--f-ink); }
+.app-screen :is(h1, h2, h3):not(.map-title), .app-screen .page-title h1 { color: var(--f-ink) !important; }
+.app-screen .daily-goal .goal-text b { color: #fff !important; }
+.app-screen .muted, .app-screen .card p { color: var(--f-muted); }
+
+/* ---------- Header ---------- */
+.app-screen .masthead { margin-bottom: 22px; gap: 10px; justify-content: flex-start; }
+.app-screen .masthead .settings-link { margin-left: auto; }
+.app-screen .app-brand { font-weight: 900; letter-spacing: -0.6px; color: var(--f-ink); }
+.app-screen .brand-suffix { color: var(--f-brand); }
+.app-screen :is(.app-back, .settings-link) {
+  width: 44px; min-height: 44px; padding: 0 !important; border-radius: 15px !important;
+  background: var(--f-surface) !important; color: var(--f-ink) !important;
+  border: 1.5px solid var(--f-line) !important; box-shadow: var(--f-lift) !important;
+  font-size: 24px !important; font-weight: 900; line-height: 1;
+}
+
+/* ---------- Titles ---------- */
+.app-screen .page-title h1 { font-size: 30px; font-weight: 900; letter-spacing: -1px; }
+.home-hello { margin: 4px 0 18px; }
+.home-hello p {
+  margin: 0 0 4px; font-size: 13px; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--f-brand);
+}
+.home-hello h1 { margin: 0; font-size: 31px; line-height: 1.12; font-weight: 900; letter-spacing: -1.1px; text-wrap: balance; }
+
+/* ---------- Cards ---------- */
+.shell .card {
+  background: var(--f-surface) !important; color: var(--f-ink);
+  border: 1.5px solid var(--f-line) !important; border-radius: var(--f-radius);
+  box-shadow: var(--f-lift) !important; padding: 20px;
+}
+.shell .card h2 { font-weight: 900; letter-spacing: -0.4px; }
+.shell .tag {
+  display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px !important; border-radius: 999px;
+  background: var(--f-brand-soft) !important; color: var(--f-brand) !important;
+  font-size: 10.5px; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase;
+}
+
+/* ---------- Buttons ---------- */
+.shell .btn { border-radius: 16px; font-weight: 800; transition: transform 0.1s ease, box-shadow 0.1s ease, background 0.15s ease; }
+:is(.app-screen, .wizard-shell) .btn { min-height: 50px; font-size: 15px; }
+.shell .btn.primary {
+  background: var(--f-action) !important; color: #fff !important; border: 0 !important;
+  box-shadow: 0 4px 0 var(--f-brand-deep) !important;
+}
+.shell .btn.secondary {
+  background: var(--f-brand-soft) !important; color: var(--f-brand) !important; border: 0 !important;
+  box-shadow: 0 4px 0 var(--f-brand-press) !important;
+}
+.shell :is(.btn.primary, .btn.secondary):active { transform: translateY(3px) !important; box-shadow: 0 1px 0 var(--f-brand-deep) !important; }
+.shell .btn.text { color: var(--f-brand) !important; font-weight: 800; min-height: 40px; }
+.app-screen .btn.compact { min-height: 42px; font-size: 14px; padding: 9px 16px; }
+.shell :is(button, .btn, .choice-tile):focus-visible { outline: 3px solid var(--f-gold); outline-offset: 2px; }
+
+/* ---------- Progress ---------- */
+.shell .progress { height: 12px !important; border-radius: 999px !important; background: var(--f-brand-soft) !important; }
+.shell .progress i { border-radius: 999px !important; background: linear-gradient(90deg, var(--f-brand), var(--f-violet)) !important; }
+
+/* ---------- Daily goal hero ---------- */
+.app-screen .daily-goal {
+  position: relative; overflow: hidden; color: #fff;
+  background: linear-gradient(150deg, var(--f-hero-a) 0%, var(--f-hero-b) 100%) !important;
+  border: 0 !important; box-shadow: 0 5px 0 var(--f-brand-deep), 0 20px 44px rgba(51, 85, 255, 0.28) !important;
+}
+.app-screen .daily-goal.complete {
+  background: linear-gradient(150deg, var(--f-mint-strong) 0%, #0b7a8c 100%) !important;
+  box-shadow: 0 5px 0 var(--f-mint-deep), 0 20px 44px rgba(20, 193, 124, 0.28) !important;
+}
+.app-screen .daily-goal::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0.11;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='56' viewBox='0 0 56 56'%3E%3Cg fill='none' stroke='%23fff' stroke-width='1.6'%3E%3Crect x='16' y='16' width='24' height='24'/%3E%3Crect x='16' y='16' width='24' height='24' transform='rotate(45 28 28)'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 56px 56px;
+}
+.app-screen .daily-goal > * { position: relative; }
+.app-screen .daily-goal .goal-text b { color: #fff; font-size: 21px; font-weight: 900; }
+.app-screen .daily-goal .goal-text span { color: rgba(255, 255, 255, 0.86); font-weight: 700; }
+.app-screen .daily-goal .goal-ring .ring-bg { stroke: rgba(255, 255, 255, 0.22); }
+.app-screen .daily-goal .goal-ring .ring-fg { stroke: var(--f-gold); }
+.app-screen .daily-goal .goal-ring em { color: #fff; }
+.app-screen .daily-goal .goal-lantern { background: radial-gradient(circle, rgba(255, 255, 255, 0.4) 0, transparent 70%); }
+.app-screen .daily-goal .goal-trail path { stroke: rgba(255, 255, 255, 0.5); }
+.app-screen .daily-goal .goal-label {
+  background: var(--f-surface); border: 0; border-radius: 18px; box-shadow: 0 4px 0 rgba(10, 16, 50, 0.18);
+}
+.app-screen .daily-goal .goal-label .tag { background: var(--f-brand-soft) !important; }
+.app-screen .daily-goal .goal-node.current .goal-orb {
+  background: var(--f-gold); color: #3a2600; box-shadow: 0 5px 0 var(--f-gold-deep);
+}
+.app-screen .daily-goal .goal-node.current .goal-orb::after { border-color: #fff; }
+.app-screen .daily-goal .goal-node.todo .goal-orb { background: rgba(255, 255, 255, 0.2); color: #fff; box-shadow: 0 5px 0 rgba(10, 16, 50, 0.2); }
+.app-screen .daily-goal .goal-node.done .goal-orb { background: #fff; color: var(--f-mint-deep); box-shadow: 0 5px 0 rgba(10, 16, 50, 0.18); }
+.app-screen .daily-goal .goal-node.stopped .goal-orb { background: rgba(255, 255, 255, 0.14); color: rgba(255, 255, 255, 0.7); }
+.app-screen .daily-goal .btn.primary { background: var(--f-action) !important; }
+
+/* ---------- Stats chips ---------- */
+.app-screen .play-stats { margin: 0 0 18px; }
+.app-screen .stat-chip { background: var(--f-surface); border: 1.5px solid var(--f-line); box-shadow: var(--f-lift); padding: 9px 14px; }
+.app-screen .stat-chip b { font-weight: 900; }
+
+/* ---------- First choices ---------- */
+.app-screen .today-card:has(.first-choices) { background: none !important; border: 0 !important; box-shadow: none !important; padding: 0; }
+.app-screen .today-card:has(.first-choices) h2 { font-size: 15px; font-weight: 900; color: var(--f-muted); margin: 0 0 12px; }
+.app-screen .first-choices { display: grid; gap: 14px; }
+.choice-tile {
+  display: flex; align-items: center; gap: 15px; width: 100%; padding: 18px; text-align: left;
+  background: var(--f-surface); color: var(--f-ink); border: 1.5px solid var(--f-line); border-radius: 22px;
+  box-shadow: var(--f-lift); transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+.choice-tile:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--f-line); }
+.choice-icon { flex: none; width: 58px; height: 58px; border-radius: 18px; display: grid; place-items: center; color: #fff; }
+.choice-icon .icon { width: 28px; height: 28px; }
+.choice-tile.tone-blue .choice-icon { background: linear-gradient(150deg, var(--f-hero-a), var(--f-hero-b)); box-shadow: 0 4px 0 var(--f-brand-deep); }
+.choice-tile.tone-gold .choice-icon { background: var(--f-gold); color: #3a2600; box-shadow: 0 4px 0 var(--f-gold-deep); }
+.choice-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.choice-text b { font-size: 18px; font-weight: 900; letter-spacing: -0.3px; }
+.choice-text small { font-size: 13px; font-weight: 700; color: var(--f-muted); }
+.choice-tile > .icon { color: var(--f-muted); width: 20px; }
+
+/* ---------- Misc home blocks ---------- */
+.app-screen .reading-resume {
+  min-height: 64px; border-radius: 20px !important; padding: 14px 18px !important;
+  background: var(--f-surface) !important; color: var(--f-brand) !important;
+  border: 1.5px solid var(--f-line) !important; box-shadow: var(--f-lift) !important;
+}
+.app-screen .reading-resume small { color: var(--f-muted) !important; font-weight: 700; }
+.app-screen .review-row {
+  background: var(--f-surface); border: 1.5px solid var(--f-line); border-radius: 18px; box-shadow: var(--f-lift);
+  color: var(--f-ink); font-size: 15px; font-weight: 800; margin-bottom: 10px;
+}
+
+/* ---------- Programmes ---------- */
+.app-screen .program h3 { font-size: 23px; font-weight: 900; letter-spacing: -0.6px; margin: 12px 0 16px; }
+.app-screen .program-meta { color: var(--f-muted); font-size: 13px; font-weight: 700; }
+.app-screen .programme-fold summary { font-weight: 900; color: var(--f-muted); padding: 12px 4px; cursor: pointer; }
+
+/* ---------- Library ---------- */
+.shell .seg {
+  background: var(--f-surface-2) !important; border: 1.5px solid var(--f-line) !important;
+  border-radius: 18px !important; padding: 4px !important;
+}
+.shell .seg .btn { min-height: 42px; border-radius: 14px !important; color: var(--f-muted) !important; background: transparent !important; box-shadow: none !important; font-size: 14px; }
+.shell .seg .btn.selected { background: var(--f-surface) !important; color: var(--f-brand) !important; box-shadow: 0 3px 0 var(--f-line) !important; }
+.app-screen .search {
+  background: var(--f-surface) !important; border: 1.5px solid var(--f-line) !important; border-radius: 18px !important;
+  box-shadow: var(--f-lift) !important; color: var(--f-muted);
+}
+.app-screen .search input { color: var(--f-ink); font-weight: 700; }
+.app-screen .section-row {
+  background: var(--f-surface) !important; border: 1.5px solid var(--f-line) !important; border-radius: 20px !important;
+  box-shadow: var(--f-lift) !important; padding: 14px !important; gap: 14px; margin-bottom: 10px;
+  transition: transform 0.1s ease;
+}
+.app-screen .section-row:active { transform: translateY(2px); }
+.app-screen .section-row b { font-size: 16px !important; font-weight: 900; color: var(--f-ink) !important; }
+.app-screen .section-row small { font-size: 12px !important; font-weight: 700; color: var(--f-muted) !important; }
+.app-screen .surah-number {
+  flex: none; width: 44px; height: 44px; display: grid; place-items: center; border-radius: 14px !important;
+  background: var(--f-brand-soft) !important; color: var(--f-brand) !important; font-weight: 900; font-size: 14px !important;
+}
+.app-screen .section-ar { color: var(--f-ink) !important; font-size: 22px; }
+.app-screen .page-jump label { color: var(--f-muted) !important; font-weight: 800; }
+.app-screen .page-jump {
+  background: var(--f-surface) !important; border: 1.5px solid var(--f-line) !important; border-radius: 20px !important;
+  box-shadow: var(--f-lift) !important;
+}
+.shell :is(input[type="number"], input[type="text"], input[type="search"]:not(#search), input[type="time"], input[type="date"], select) {
+  background: var(--f-surface) !important; border: 1.5px solid var(--f-line) !important; border-radius: 14px !important;
+  color: var(--f-ink) !important; font-weight: 700;
+}
+
+/* ---------- Bottom navigation ---------- */
+body:not(.reader-open):not(.wizard-open):not(.book-study-open) .nav {
+  background: var(--f-surface) !important; border: 1.5px solid var(--f-line) !important;
+  border-radius: 26px !important; padding: 6px !important; box-shadow: var(--f-float) !important;
+}
+body:not(.reader-open):not(.wizard-open):not(.book-study-open) .nav button {
+  color: var(--f-muted) !important; font-size: 11px; font-weight: 800; border-radius: 20px; min-height: 56px;
+  background: transparent !important; border: 0 !important;
+}
+body:not(.reader-open):not(.wizard-open):not(.book-study-open) .nav button .icon { width: 23px; height: 23px; }
+body:not(.reader-open):not(.wizard-open):not(.book-study-open) .nav button[aria-current="page"] {
+  background: var(--f-action) !important; color: #fff !important; box-shadow: 0 3px 0 var(--f-brand-deep) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .choice-tile, .app-screen .btn, .app-screen .section-row { transition: none; }
+}
+
+/* ---------- Creation wizard ---------- */
+.program-guide { background: transparent !important; }
+.program-guide > header { color: var(--f-muted) !important; font-weight: 800; font-size: 13px !important; }
+.program-guide > header .btn.text {
+  min-height: 42px; padding: 0 14px !important; border-radius: 14px; background: var(--f-surface) !important;
+  border: 1.5px solid var(--f-line) !important; box-shadow: var(--f-lift) !important; color: var(--f-ink) !important;
+}
+.program-guide > .progress { height: 14px !important; }
+.program-guide h1, .guide-book-form > h2 { font-weight: 900 !important; letter-spacing: -1px !important; color: var(--f-ink) !important; }
+.program-guide label { color: var(--f-ink); font-weight: 800; }
+.program-guide input:not([type="checkbox"]) {
+  background: var(--f-surface) !important; border: 1.5px solid var(--f-line) !important; border-radius: 16px !important;
+  box-shadow: var(--f-lift); color: var(--f-ink) !important; font-weight: 800;
+}
+.program-guide input:not([type="checkbox"]):focus { outline: none; border-color: var(--f-action) !important; }
+.guide-choice {
+  background: var(--f-surface) !important; color: var(--f-ink) !important;
+  border: 1.5px solid var(--f-line) !important; border-radius: 20px !important; box-shadow: var(--f-lift);
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+.guide-choice:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--f-line); }
+.guide-choice strong { font-weight: 900; }
+.guide-choice small { color: var(--f-muted) !important; font-weight: 700; }
+.guide-choice > span[aria-hidden="true"] { color: var(--f-muted); font-size: 22px; font-weight: 900; }
+.guide-choice.selected, .guide-yes-no .guide-choice.selected {
+  background: var(--f-brand-soft) !important; border: 2px solid var(--f-action) !important; color: var(--f-ink) !important;
+  box-shadow: 0 4px 0 var(--f-action) !important;
+}
+.guide-yes-no [aria-pressed="true"] > span { background: var(--f-action) !important; }
+.guide-yes-no [aria-pressed="false"] > span { color: var(--f-line) !important; }
+.guide-measures button, .guide-chips button {
+  background: var(--f-surface) !important; color: var(--f-ink) !important; border: 1.5px solid var(--f-line) !important;
+  border-radius: 14px !important; box-shadow: 0 3px 0 var(--f-line); font-weight: 800 !important;
+}
+.guide-measures .selected, .guide-chips .selected {
+  background: var(--f-action) !important; color: #fff !important; border-color: var(--f-action) !important;
+  box-shadow: 0 3px 0 var(--f-brand-deep) !important;
+}
+.guide-scope .btn { background: var(--f-surface) !important; border: 1.5px solid var(--f-line) !important; box-shadow: var(--f-lift) !important; }
+.guide-scope .btn.selected { background: var(--f-action) !important; color: #fff !important; box-shadow: 0 4px 0 var(--f-brand-deep) !important; }
+.guide-note, .guide-range {
+  background: var(--f-surface) !important; border: 1.5px dashed var(--f-line) !important; border-radius: 18px !important;
+  color: var(--f-muted); font-weight: 700;
+}
+.guide-ready { background: var(--f-mint) !important; color: #fff !important; border-radius: 50% !important; box-shadow: 0 4px 0 var(--f-mint-deep); }
+.guide-list label { border-bottom-color: var(--f-line) !important; font-weight: 800; }
+.guide-list input[type="checkbox"] { accent-color: var(--f-action) !important; }
+.guide-search { background: var(--f-bg) !important; }
+.program-guide > footer, .wizard-shell .program-guide > footer { border-top: 0 !important; }
+.program-guide > footer .btn.primary { min-height: 58px; font-size: 17px; border-radius: 18px; }
+
+/* ---------- Reader and session controls (the Mushaf page itself is not touched) ---------- */
+.shell.reading :is(.learning-close, .app-back),
+.reading .reader-head .icon-btn {
+  width: 44px; height: 44px; min-height: 44px; padding: 0 !important; display: grid; place-items: center;
+  background: var(--f-surface) !important; color: var(--f-ink) !important; border: 1.5px solid var(--f-line) !important;
+  border-radius: 15px !important; box-shadow: var(--f-lift) !important; font-size: 24px; font-weight: 900; line-height: 1;
+}
+.learning-head h1 { font-weight: 900 !important; letter-spacing: -0.5px; color: var(--f-ink) !important; }
+.learning-head > div > span { color: var(--f-brand) !important; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; font-size: 11px !important; }
+.learning-position {
+  padding: 5px 11px; border-radius: 999px; background: var(--f-brand-soft); color: var(--f-brand) !important;
+  font-weight: 900; font-variant-numeric: tabular-nums;
+}
+.learning-heading h2, .learning-heading h1 { font-weight: 900 !important; color: var(--f-ink) !important; }
+
+/* Mushaf / verse-by-verse switch and other reading toggles */
+.reading-display {
+  background: var(--f-surface-2) !important; border: 1.5px solid var(--f-line) !important;
+  border-radius: 18px !important; padding: 4px !important; box-shadow: none !important;
+}
+.reading-display .btn { border-radius: 14px !important; font-weight: 800; color: var(--f-muted) !important; background: transparent !important; border: 0 !important; box-shadow: none !important; }
+.reading-display .btn[aria-pressed="true"] { background: var(--f-surface) !important; color: var(--f-brand) !important; box-shadow: 0 3px 0 var(--f-line) !important; }
+
+/* Bottom bars of a session or of the free reader */
+:is(.listen-bar, .dock-tools, .reciting-controls) {
+  background: var(--f-surface) !important; border: 1.5px solid var(--f-line) !important;
+  border-radius: 24px !important; box-shadow: var(--f-float) !important;
+}
+:is(.learning-play, .dock-tools .play, .reader-dock .play) {
+  background: var(--f-action) !important; color: #fff !important; border: 0 !important;
+  border-radius: 50% !important; box-shadow: 0 4px 0 var(--f-brand-deep) !important;
+}
+:is(.learning-play, .learning-next, .listen-queue, .speed-trigger, .mic):active { transform: translateY(3px) !important; }
+.learning-play .stop-square { background: #fff !important; }
+.learning-next, .reciting-controls .learning-primary {
+  background: var(--f-action) !important; color: #fff !important; border: 0 !important;
+  border-radius: 18px !important; box-shadow: 0 4px 0 var(--f-brand-deep) !important; font-weight: 900 !important;
+}
+.listen-queue, .reciting-controls .learning-secondary {
+  background: var(--f-brand-soft) !important; color: var(--f-brand) !important; border: 0 !important;
+  border-radius: 16px !important; box-shadow: 0 3px 0 var(--f-brand-press) !important; font-weight: 800;
+}
+.listen-queue .listen-add { color: var(--f-gold-deep) !important; font-weight: 900; }
+:is(.speed-trigger, .listen-bar .speed-trigger, .dock-tools .speed-trigger) {
+  background: var(--f-surface-2) !important; color: var(--f-ink) !important; border: 1.5px solid var(--f-line) !important;
+  border-radius: 14px !important; box-shadow: none !important; font-weight: 900;
+}
+.dock-tools .mic, .reciting-controls .mic {
+  background: var(--f-coral-strong) !important; color: #fff !important; border: 0 !important; border-radius: 50% !important;
+  box-shadow: 0 4px 0 color-mix(in srgb, var(--f-coral-strong) 60%, #000) !important;
+}
+
+/* Frames around the reading area keep their paper, with the new outline */
+:is(.learning-card, .learning-mushaf, .reader-stage) { border-color: var(--f-line) !important; border-radius: 20px !important; }
+
+/* Dialogs (quit the session, speed, solidity map…) */
+dialog.reader-menu, dialog.speed-menu, .modern-speed {
+  background: var(--f-surface) !important; color: var(--f-ink) !important; border: 1.5px solid var(--f-line) !important;
+  border-radius: 26px !important; box-shadow: var(--f-float) !important;
+}
+dialog.reader-menu h2, dialog.reader-menu h3 { font-weight: 900; color: var(--f-ink); }
+dialog::backdrop { background: rgba(10, 15, 31, 0.45); }
+dialog .btn { border-radius: 16px !important; font-weight: 800; }
+
+/* Toast */
+#toast {
+  background: var(--f-ink) !important; color: var(--f-surface) !important; border-radius: 18px !important;
+  font-weight: 800; box-shadow: var(--f-float) !important;
+}
+.learning-actions .learning-success, .learning-success {
+  background: var(--f-mint-strong) !important; color: #fff !important; border: 0 !important; border-radius: 18px !important;
+  box-shadow: 0 4px 0 color-mix(in srgb, var(--f-mint-strong) 60%, #000) !important; font-weight: 900 !important;
+}
+.learning-actions .learning-secondary {
+  background: var(--f-brand-soft) !important; color: var(--f-brand) !important; border: 0 !important;
+  border-radius: 16px !important; box-shadow: 0 3px 0 var(--f-brand-press) !important; font-weight: 800;
+}
+.learning-actions :is(.learning-success, .learning-secondary):active { transform: translateY(3px) !important; }
+
+/* ---------- Book study (questions and answers) ---------- */
+.qa-study-head .qa-close {
+  width: 44px; height: 44px; min-height: 44px; padding: 0 !important; display: grid; place-items: center;
+  background: var(--f-surface) !important; color: var(--f-ink) !important; border: 1.5px solid var(--f-line) !important;
+  border-radius: 15px !important; box-shadow: var(--f-lift) !important; font-size: 24px; font-weight: 900;
+}
+.qa-study-head :is(h1, h2, strong, b) { font-weight: 900 !important; color: var(--f-ink) !important; }
+.qa-face {
+  background: var(--f-surface) !important; border: 1.5px solid var(--f-line) !important;
+  border-radius: 24px !important; box-shadow: var(--f-lift) !important;
+}
+.qa-card-tag { color: var(--f-brand) !important; font-weight: 900 !important; text-transform: uppercase; letter-spacing: 0.06em; }
+.qa-verse-audio .qa-audio {
+  background: var(--f-brand-soft) !important; color: var(--f-brand) !important; border: 0 !important;
+  border-radius: 14px !important; box-shadow: 0 3px 0 var(--f-brand-press) !important; font-weight: 800;
+}
+/* The four answers, each with its own colour: clearer for everyone, children included. */
+.qa-ratings .qa-grade {
+  border: 0 !important; border-radius: 18px !important; color: #fff !important; min-height: 64px;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+.qa-ratings .qa-grade span { font-weight: 900; font-size: 14px; }
+.qa-ratings .qa-grade strong { font-weight: 800; opacity: 0.92; }
+.qa-ratings .qa-grade-1 { background: var(--f-coral-strong) !important; box-shadow: 0 4px 0 color-mix(in srgb, var(--f-coral-strong) 60%, #000) !important; }
+.qa-ratings .qa-grade-2 { background: var(--f-gold) !important; color: #3a2600 !important; box-shadow: 0 4px 0 var(--f-gold-deep) !important; }
+.qa-ratings .qa-grade-3 { background: var(--f-mint-strong) !important; box-shadow: 0 4px 0 color-mix(in srgb, var(--f-mint-strong) 60%, #000) !important; }
+.qa-ratings .qa-grade-4 { background: var(--f-action) !important; box-shadow: 0 4px 0 var(--f-brand-deep) !important; }
+.qa-ratings .qa-grade:active { transform: translateY(3px) !important; box-shadow: none !important; }
+.qa-tap-hint { color: var(--f-muted) !important; font-weight: 800; }
+
+/* ---------- Offline badge (small download icon with a circular progress ring) ---------- */
+.offline-badge {
+  position: relative; margin-left: auto; width: 44px; height: 44px; flex: none; display: grid; place-items: center;
+  border-radius: 50%; background: var(--f-surface); border: 1.5px solid var(--f-line); box-shadow: var(--f-lift);
+  color: var(--f-brand); cursor: pointer; padding: 0;
+}
+.offline-badge + .settings-link { margin-left: 0 !important; }
+.offline-badge .icon { width: 18px; height: 18px; position: relative; }
+.offline-ring { position: absolute; inset: -1.5px; width: calc(100% + 3px); height: calc(100% + 3px); }
+.offline-ring circle { fill: none; stroke-width: 3.5; }
+.offline-ring .ring-bg { stroke: transparent; }
+.offline-ring .ring-fg { stroke: var(--f-action); stroke-linecap: round; transition: stroke-dashoffset 0.4s ease; }
+.offline-badge.idle .ring-fg { stroke: transparent; }
+.offline-badge.busy .ring-bg { stroke: var(--f-brand-soft); }
+.offline-badge.busy .icon { animation: offline-bob 1.4s ease-in-out infinite; }
+.offline-badge.ready { color: var(--f-mint-strong); }
+.offline-badge.ready .ring-fg { stroke: var(--f-mint); }
+.offline-badge:active { transform: translateY(3px); box-shadow: none; }
+@keyframes offline-bob { 50% { transform: translateY(2px); } }
+@media (prefers-reduced-motion: reduce) { .offline-badge.busy .icon { animation: none; } }
+
+/* ---------- Revision: one "Je maîtrise" button ---------- */
+.page-mastery { display: grid; gap: 10px; }
+.page-mastery-hint { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0; }
+.page-mastery-hint .btn.text { padding: 0 !important; min-height: 32px; font-weight: 900; }
+.page-mastery-tries {
+  padding: 4px 10px; border-radius: 999px; background: var(--f-gold-soft); color: var(--f-gold-deep);
+  font-size: 12px; font-weight: 900;
+}
+.shell .btn.page-mastered {
+  min-height: 56px; font-size: 17px; font-weight: 900;
+  background: var(--f-mint-strong) !important; box-shadow: 0 4px 0 color-mix(in srgb, var(--f-mint-strong) 60%, #000) !important;
+}
+
+/* ---------- Header buttons: same size and shape, evenly spaced ---------- */
+.app-screen .masthead { gap: 10px; align-items: center; }
+.app-screen .masthead :is(.app-back, .offline-badge, .settings-link) {
+  flex: 0 0 46px; width: 46px !important; height: 46px !important; min-width: 46px; min-height: 46px !important;
+  padding: 0 !important; margin: 0; display: grid !important; place-items: center;
+  border-radius: 50% !important; background: var(--f-surface) !important;
+  border: 1.5px solid var(--f-line) !important; box-shadow: var(--f-lift) !important;
+}
+.app-screen .masthead .offline-badge { margin-left: auto !important; }
+.app-screen .masthead .settings-link { margin-left: 0 !important; color: var(--f-ink) !important; }
+.app-screen .masthead .settings-link .icon { width: 20px; height: 20px; }
+.app-screen .masthead .offline-badge .icon { width: 20px; height: 20px; }
+
+/* ---------- Streak and stars side by side ---------- */
+.app-screen .play-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; flex-wrap: nowrap; }
+.app-screen .stat-chip { min-width: 0; justify-content: center; white-space: nowrap; padding: 9px 10px; }
+.app-screen .stat-chip small { overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- Extra work on a finished goal step ---------- */
+/* A finished step is a win: full colour, a slightly lighter card, and a bright golden check that pops in. */
+.app-screen .daily-goal .goal-node.done .goal-label { opacity: 1; background: color-mix(in srgb, var(--f-surface) 90%, transparent); }
+.app-screen .daily-goal .goal-node.done .goal-done { color: var(--f-mint-strong) !important; font-weight: 900; }
+:root[data-theme="dark"] .app-screen .daily-goal .goal-node.done .goal-done { color: var(--f-mint) !important; }
+.app-screen .daily-goal .goal-node.done .goal-orb {
+  background: radial-gradient(circle at 35% 30%, #fff3b8 0, #ffd23f 38%, #f5a300 100%);
+  color: #fff; box-shadow: 0 5px 0 #c27c00, 0 0 0 4px rgba(255, 255, 255, 0.35), 0 0 22px rgba(255, 210, 63, 0.75);
+  animation: orb-win 0.55s cubic-bezier(.3, 1.6, .5, 1) both;
+}
+.app-screen .daily-goal .goal-node.done .goal-orb .icon { width: 34px; height: 34px; stroke-width: 3.4; filter: drop-shadow(0 2px 0 rgba(150, 90, 0, 0.55)); }
+.app-screen .daily-goal .goal-node.done:nth-child(2) .goal-orb { animation-delay: 0.08s; }
+.app-screen .daily-goal .goal-node.done:nth-child(3) .goal-orb { animation-delay: 0.16s; }
+.app-screen .daily-goal .goal-node.done:nth-child(n+4) .goal-orb { animation-delay: 0.24s; }
+@keyframes orb-win { 0% { transform: scale(0.4) rotate(-25deg); } 70% { transform: scale(1.12) rotate(4deg); } 100% { transform: scale(1) rotate(0); } }
+@media (prefers-reduced-motion: reduce) { .app-screen .daily-goal .goal-node.done .goal-orb { animation: none; } }
+/* The goal card is a size container: the continue button and the tag scale with the card's own width,
+   so they never spill out, whatever the phone or the step's indent. */
+.app-screen .daily-goal .goal-label { overflow: hidden; container-type: inline-size; }
+.goal-extra {
+  box-sizing: border-box; width: 100%; max-width: 100%; margin-top: 8px; justify-content: center; text-align: center;
+  white-space: nowrap; line-height: 1.25; gap: 6px; font-size: clamp(11.5px, 7.4cqi, 14px) !important; padding: 9px 8px !important;
+}
+.goal-extra .icon { flex: none; width: 16px; }
+@container (max-width: 205px) { .goal-extra .icon { display: none; } }
+.app-screen .daily-goal .goal-label .tag {
+  display: block; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: clamp(9.5px, 5.6cqi, 11px) !important;
+}
+.app-screen .daily-goal .goal-label b { overflow-wrap: anywhere; }
+@media (max-width: 360px) {
+  .app-screen .daily-goal .goal-node.alt { padding-left: 18px; }
+  .app-screen .stat-chip small { display: none; }
+  body:not(.reader-open):not(.wizard-open):not(.book-study-open) .nav button { font-size: 10px; white-space: nowrap; letter-spacing: -0.01em; }
+}
+
+/* Map tabs share the action colour so the selected tab stays readable in dark mode. */
+.app-screen .map-tab.selected { background: var(--f-action); border-color: var(--f-action); color: #fff; box-shadow: 0 3px 0 var(--f-brand-deep); }
+
+/* Recitation feedback: only the colour of the letters changes, green when right, red when wrong. */
+:root { --mushaf-heard: #0b7a43; --mushaf-check: #c62828; }
+:root[data-theme="dark"] { --mushaf-heard: #6fdc9c; --mushaf-check: #ff8a80; }
+:is(.word, .phonetic-word):is(.heard, .check), .quran-word:is(.is-heard, .is-check) {
+  background: transparent !important; box-shadow: none !important; text-decoration: none !important;
+}
+.word.check::after { content: none !important; }
+:is(.word, .phonetic-word).heard, .quran-word.is-heard, [data-theme="dark"] .quran-book-sheet .quran-word.is-heard { color: var(--mushaf-heard) !important; }
+:is(.word, .phonetic-word).check, .quran-word.is-check, [data-theme="dark"] .quran-book-sheet .quran-word.is-check { color: var(--mushaf-check) !important; }
+.quran-word.is-check .tajweed-segment, .quran-word.is-heard .tajweed-segment { color: inherit !important; }
+.reader-menu .legend .legend-heard { color: var(--mushaf-heard); font-weight: 800; }
+.reader-menu .legend .legend-check { color: var(--mushaf-check); font-weight: 800; }
+
+/* Reading bars float over the page as frosted glass, step aside while the page scrolls,
+   and come back with a tap. Elsewhere (matns, errors) the groups disappear from layout. */
+.reader-hud { display: contents; }
+.shell.reading.immersive {
+  --glass: rgba(255, 255, 255, .5); --glass-edge: rgba(255, 255, 255, .75);
+  --glass-shadow: 0 12px 32px rgba(20, 32, 54, .14), inset 0 1px 0 rgba(255, 255, 255, .9);
+  --glass-control: rgba(20, 32, 54, .05); --glass-control-edge: rgba(20, 32, 54, .09);
+  position: relative; display: block; padding: 0; gap: 0;
+}
+[data-theme="dark"] .shell.reading.immersive {
+  --glass: rgba(14, 20, 42, .42); --glass-edge: rgba(255, 255, 255, .11);
+  --glass-shadow: 0 12px 32px rgba(0, 0, 0, .4), inset 0 1px 0 rgba(255, 255, 255, .07);
+  --glass-control: rgba(255, 255, 255, .07); --glass-control-edge: rgba(255, 255, 255, .12);
+}
+.shell.reading.immersive > .reader-stage {
+  position: absolute; inset: 0; border: 0 !important; border-radius: 0 !important;
+  padding-top: var(--hud-top, 130px); padding-bottom: var(--hud-bottom, 150px); scroll-padding-top: var(--hud-top, 130px);
+}
+.shell.reading.immersive > .verse-reading-stage { padding-block: 0; }
+.shell.reading.immersive .quran-verse-scroll {
+  padding-top: calc(var(--hud-top, 130px) + 8px); padding-bottom: calc(var(--hud-bottom, 150px) + 8px);
+}
+.shell.reading.immersive .reader-hud {
+  position: absolute; left: 8px; right: 8px; z-index: 5;
+  display: flex; flex-direction: column; gap: 8px; padding: 10px;
+  background: var(--glass); border: 1px solid var(--glass-edge); border-radius: 24px; box-shadow: var(--glass-shadow);
+  -webkit-backdrop-filter: blur(16px) saturate(180%); backdrop-filter: blur(16px) saturate(180%);
+  transition: transform .26s cubic-bezier(.2, .8, .2, 1), opacity .2s ease;
+}
+.shell.reading.immersive .reader-hud-top { top: calc(6px + env(safe-area-inset-top)); }
+.shell.reading.immersive .reader-hud-bottom { bottom: calc(6px + env(safe-area-inset-bottom)); }
+.shell.reading.immersive.chrome-hidden .reader-hud { opacity: 0; pointer-events: none; }
+.shell.reading.immersive.chrome-hidden .reader-hud-top { transform: translateY(calc(-100% - 12px)); }
+.shell.reading.immersive.chrome-hidden .reader-hud-bottom { transform: translateY(calc(100% + 12px)); }
+/* Inside the glass, controls lose their opaque boxes and become lightly tinted glass too. */
+.shell.reading.immersive .reader-hud :is(.reader-head .icon-btn, .reading-display, .dock-tools .speed-trigger, .reader-visibility, .dock-tools .mic:not(.recording)) {
+  box-shadow: none !important;
+}
+.shell.reading.immersive .reader-hud :is(.reader-head .icon-btn, .reading-display, .dock-tools .speed-trigger, .reader-visibility) {
+  background: var(--glass-control) !important; border: 1px solid var(--glass-control-edge) !important;
+}
+.shell.reading.immersive .reader-hud .reading-display .btn[aria-pressed="true"] { background: var(--glass-control) !important; box-shadow: inset 0 0 0 1px var(--glass-control-edge) !important; }
+.shell.reading.immersive .reader-hud .dock-tools { background: transparent !important; border: 0 !important; box-shadow: none !important; padding: 0; }
+.shell.reading.immersive .reader-hud :is(.reader-status, .reader-dock) { margin: 0; padding: 0; }
+.shell.reading.immersive .reader-hud .quran-page-position { margin: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .shell.reading.immersive .reader-hud { transition: opacity .15s ease; }
+  .shell.reading.immersive.chrome-hidden .reader-hud { transform: none; }
+}
+/* Compact glass: thin bars, smaller controls, the page keeps the room. */
+.shell.reading.immersive .reader-hud { padding: 6px 8px; gap: 5px; border-radius: 18px; left: 6px; right: 6px; }
+.shell.reading.immersive .reader-hud .reader-head { min-height: 0; gap: 8px; }
+.shell.reading.immersive .reader-hud .reader-head .icon-btn { width: 36px; height: 36px; min-height: 36px; border-radius: 12px; font-size: 18px; }
+.shell.reading.immersive .reader-hud .reader-head h1 { font-size: 16px; line-height: 1.15; }
+.shell.reading.immersive .reader-hud .reader-head .small { font-size: 10px; }
+.shell.reading.immersive .reader-hud .reading-display { padding: 3px; border-radius: 13px; }
+.shell.reading.immersive .reader-hud .reading-display .btn { min-height: 30px !important; padding: 3px 5px !important; border-radius: 10px !important; font-size: 12px; }
+.shell.reading.immersive .reader-hud .reader-status { min-height: 0; font-size: 9.5px; line-height: 1.3; }
+.shell.reading.immersive .reader-hud .reader-dock { gap: 3px; }
+.shell.reading.immersive .reader-hud .dock-tools { min-height: 40px; gap: 8px; }
+.shell.reading.immersive .reader-hud .dock-tools :is(.speed-trigger, .round-tool, .mic, .reader-visibility) {
+  width: auto; min-width: 40px; height: 40px; min-height: 40px; border-radius: 13px;
+}
+.shell.reading.immersive .reader-hud .dock-tools .round-tool { padding: 8px 12px; }
+.shell.reading.immersive .reader-hud .dock-tools .mic { width: 40px; border-radius: 50%; }
+.shell.reading.immersive .reader-hud .dock-tools .reader-visibility { padding: 4px 12px; font-size: 13px; }
+.shell.reading.immersive .reader-hud .dock-tools :is(.icon, svg) { width: 19px; height: 19px; }
+.shell.reading.immersive .reader-hud .dock-tools .level { flex: 1; min-width: 30px; }
+.shell.reading.immersive .reader-hud .quran-page-position { font-size: 10px; line-height: 1.2; }

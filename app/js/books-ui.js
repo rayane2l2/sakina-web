@@ -5,9 +5,10 @@ import {
   dailyCandidates,
   questionSummary,
 } from "./programme-ux.js";
-import { bookMemory, rememberBook, forgetBook } from "./session-memory.js";
+import { bookMemory, rememberBook, forgetBook, isFinishedBookSession } from "./session-memory.js";
 import { bookContentHTML } from "./book-content.js";
 import { loadBookStudy, saveBookStudy } from "./books-store.js";
+import { bookCardStatus, mapSections } from "./gamification.js";
 import {
   createPractice,
   practiceAnswer,
@@ -65,7 +66,18 @@ export function createBooksUI(host) {
       if (!db.bookStudy) db.bookStudy = emptyStudy();
       return db.bookStudy;
     };
+  const isBlankStudy = (s) => !s.programs?.length && !s.logs?.length;
+  function studiedOn(p, date) {
+    const keys = new Set(p.questionIds.map((id) => cardKey(p.editionId, id)));
+    return state().logs.some(
+      (entry) =>
+        keys.has(entry.key) &&
+        entry.log?.review &&
+        calendarDay(entry.log.review) === date,
+    );
+  }
   function dailyItems() {
+    const today = calendarDay();
     return state()
       .programs.map((p) => {
         const ed = editions.get(p.editionId);
@@ -83,6 +95,7 @@ export function createBooksUI(host) {
           waitingUntil: plan.waitingUntil,
           resume,
           resumeAt: resume ? bookMemory(host.state(), p)?.savedAt || 0 : 0,
+          studiedToday: studiedOn(p, today),
         };
       })
       .filter(Boolean);
@@ -108,6 +121,7 @@ export function createBooksUI(host) {
   }
   function canResume(p, practice = false) {
     const c = bookMemory(host.state(), p, practice);
+    if (!practice && isFinishedBookSession(c)) return false;
     return (
       Boolean(c?.practice) === practice &&
       (!practice ||
@@ -177,8 +191,12 @@ export function createBooksUI(host) {
   async function init() {
     try {
       error = null;
-      if (!host.state().bookStudy)
-        host.state().bookStudy = (await loadBookStudy()) || emptyStudy();
+      if (!host.state().bookStudy) {
+        // Read the state again after the await: the app may have replaced it meanwhile.
+        const loaded = await loadBookStudy();
+        if (!host.state().bookStudy || isBlankStudy(host.state().bookStudy))
+          host.state().bookStudy = loaded || emptyStudy();
+      }
       const response = await fetch("data/books/catalog.json");
       if (!response.ok) throw Error("Catalogue indisponible.");
       catalog = await response.json();
@@ -992,6 +1010,23 @@ export function createBooksUI(host) {
     isNested: () => mode !== "list",
     hasPrograms: () => Boolean(state().programs.length),
     programCards: groupedCards,
+    // Each active book programme for "Ma carte": its questions in book order, cut by chapter.
+    mapPrograms: () => {
+      const study = state();
+      return study.programs
+        .filter((p) => !p.archived)
+        .map((p) => {
+          const ed = editions.get(p.editionId);
+          if (!ed) return null;
+          const chosen = new Set(p.questionIds),
+            titles = new Map((ed.chapters || []).map((c) => [c.id, c.title]));
+          const cells = ed.questions
+            .filter((q) => chosen.has(q.id))
+            .map((q) => ({ n: q.number, text: String(q.searchText || "").slice(0, 90), chapter: titles.get(q.chapterId) || "", status: bookCardStatus(study.cards[cardKey(ed.id, q.id)]) }));
+          return { id: `book:${p.id}`, name: p.name, title: ed.title, ...mapSections(cells, (c) => c.chapter) };
+        })
+        .filter(Boolean);
+    },
     dailyItems,
     reminderItems: (at) =>
       state()

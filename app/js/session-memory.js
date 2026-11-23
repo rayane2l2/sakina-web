@@ -20,6 +20,11 @@ export function forgetLesson(db, programId) {
   db.lessonSessions = saved;
   if (db.dailySession?.programId === programId) db.dailySession = null;
 }
+// A scheduled book session saved after its last card: nothing is left to resume today.
+// A short pause (a card coming back in a few minutes) is still unfinished work.
+export function isFinishedBookSession(checkpoint) {
+  return Boolean(checkpoint) && !checkpoint.practice && !checkpoint.demo && !checkpoint.questionId && !checkpoint.waitingUntil;
+}
 export function bookMemory(db, programme, practice = false) {
   const legacy = db[practice ? "bookPracticeSession" : "bookSession"];
   return (

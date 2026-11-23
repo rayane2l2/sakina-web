@@ -1,0 +1,168 @@
+/* Objectif du jour, lanterne, étoiles, carte et badges.
+   Separate sheet: Mushaf and verse-by-verse styles are left untouched. */
+:root {
+  --play-brand: #2859c4;
+  --play-brand-deep: #1b3f8f;
+  --play-brand-soft: #e3ebfd;
+  --play-gold: #f2b02a;
+  --play-gold-deep: #b97f06;
+  --play-gold-soft: #fff4d6;
+  --play-anchor: #2f9bea;
+  --play-link: #7a5be0;
+  --play-solid: #1f9d68;
+  --play-repair: #e5603d;
+  --play-new: #d3dbea;
+  --play-card: #f5f8ff;
+  --play-line: #e1e9f8;
+  --play-ink: #17253b;
+  --play-muted: #6c7a93;
+  --play-orb-ink: #ffffff;
+}
+:root[data-theme="dark"] {
+  --play-brand: #6f95ff;
+  --play-brand-deep: #2c4c9c;
+  --play-brand-soft: #22314a;
+  --play-gold: #f6c453;
+  --play-gold-deep: #a8770a;
+  --play-gold-soft: #3a3018;
+  --play-anchor: #4fb2f5;
+  --play-link: #a08af2;
+  --play-solid: #3cc08a;
+  --play-repair: #f5835f;
+  --play-new: #33415c;
+  --play-card: #192434;
+  --play-line: #374761;
+  --play-ink: #e4ecff;
+  --play-muted: #9bb0d6;
+  --play-orb-ink: #0f1622;
+}
+
+/* Boutons principaux un peu plus « tactiles », seulement dans l'objectif du jour et la carte
+   (le lecteur Mushaf garde ses propres boutons). */
+:is(.daily-goal, .map-card) .btn.primary { box-shadow: 0 4px 0 var(--play-brand-deep); }
+:is(.daily-goal, .map-card) .btn.primary:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--play-brand-deep); }
+
+/* Lanterne + étoiles */
+.play-stats { display: flex; gap: 10px; margin: -12px 0 18px; flex-wrap: wrap; }
+.stat-chip {
+  display: inline-flex; align-items: center; gap: 7px; padding: 8px 13px;
+  border-radius: 999px; background: var(--play-card); border: 1.5px solid var(--play-line);
+  color: var(--play-ink); font-variant-numeric: tabular-nums;
+}
+.stat-chip .icon { width: 20px; height: 20px; color: var(--play-muted); }
+.stat-chip b { font-size: 16px; font-weight: 800; }
+.stat-chip small { font-size: 11px; color: var(--play-muted); }
+.stat-chip.lantern.lit .icon { color: var(--play-gold-deep); fill: var(--play-gold-soft); }
+.stat-chip.stars .icon { color: var(--play-gold-deep); fill: var(--play-gold); }
+[data-theme="dark"] .stat-chip.lantern.lit .icon,
+[data-theme="dark"] .stat-chip.stars .icon { color: var(--play-gold); }
+
+/* Objectif du jour */
+.daily-goal { margin-bottom: 26px; }
+.goal-head { display: flex; align-items: center; gap: 15px; }
+.goal-text { flex: 1; min-width: 0; }
+.goal-text b { display: block; font-size: 19px; font-weight: 800; color: var(--play-ink); }
+.goal-text span { display: block; font-size: 13px; color: var(--play-muted); margin-top: 3px; line-height: 1.45; }
+.goal-ring { position: relative; flex: none; width: 66px; height: 66px; }
+.goal-ring svg { width: 100%; height: 100%; display: block; }
+.goal-ring circle { fill: none; stroke-width: 8; }
+.goal-ring .ring-bg { stroke: var(--play-brand-soft); }
+.goal-ring .ring-fg { stroke: var(--play-gold); stroke-linecap: round; transition: stroke-dashoffset .8s ease; }
+.goal-ring em { position: absolute; inset: 0; display: grid; place-items: center; font-style: normal; font-weight: 800; font-size: 15px; color: var(--play-ink); }
+.goal-lantern { flex: none; width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center;
+  background: radial-gradient(circle, var(--play-gold-soft) 0, transparent 70%); animation: lantern-glow 2.4s ease-in-out infinite; }
+.goal-lantern .icon { width: 32px; height: 32px; color: var(--play-gold-deep); fill: var(--play-gold); }
+.daily-goal.complete { border-color: var(--play-gold); }
+@keyframes lantern-glow { 50% { transform: scale(1.08); } }
+
+.goal-path { list-style: none; margin: 22px 0 0; padding: 0; display: flex; flex-direction: column; gap: 20px; position: relative; }
+.goal-trail { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+.goal-trail path { fill: none; stroke: var(--play-line); stroke-width: 4; stroke-linecap: round; stroke-dasharray: 1 10; }
+.goal-node { display: flex; align-items: center; gap: 14px; position: relative; }
+.goal-node.alt { padding-left: 24px; }
+.goal-orb {
+  flex: none; width: 66px; height: 66px; border-radius: 50%; border: 0; display: grid; place-items: center;
+  background: var(--play-new); color: var(--play-orb-ink); box-shadow: 0 5px 0 rgba(0,0,0,.13); position: relative; z-index: 1;
+}
+.goal-orb .icon { width: 28px; height: 28px; }
+button.goal-orb { cursor: pointer; transition: transform .12s; }
+button.goal-orb:active { transform: translateY(4px); box-shadow: 0 1px 0 rgba(0,0,0,.13); }
+.goal-node.current .goal-orb { background: var(--play-brand); box-shadow: 0 5px 0 var(--play-brand-deep); }
+.goal-node.current .goal-orb::after { content: ""; position: absolute; inset: -8px; border-radius: 50%; border: 4px solid var(--play-brand); opacity: .35; animation: orb-pulse 1.8s ease-out infinite; }
+.goal-node.todo .goal-orb { background: var(--play-brand-soft); color: var(--play-brand); }
+.goal-node.done .goal-orb { background: var(--play-solid); }
+.goal-node.stopped .goal-orb { background: var(--play-new); color: var(--play-muted); box-shadow: none; }
+@keyframes orb-pulse { from { transform: scale(.92); opacity: .5; } to { transform: scale(1.2); opacity: 0; } }
+.goal-label { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 3px;
+  background: var(--play-card); border: 1.5px solid var(--play-line); border-radius: 18px; padding: 12px 14px; }
+.goal-label b { font-size: 16px; font-weight: 800; color: var(--play-ink); }
+.goal-label small { font-size: 12px; color: var(--play-muted); line-height: 1.4; }
+.goal-go { margin-top: 8px; }
+.goal-done { font-weight: 700; color: var(--play-solid) !important; }
+.goal-node.done .goal-label { opacity: .78; }
+
+/* Carte */
+.map-card { margin-bottom: 18px; }
+.map-title { font-size: 12px !important; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--play-muted); margin: 0 0 12px !important; }
+/* Maps: one tab per programme, the whole content in tiles, a separator per juz or chapter. */
+.map-legend-line { display: flex; flex-wrap: wrap; gap: 4px 10px; margin: 0 0 14px; font-size: 11.5px; font-weight: 800; color: var(--play-muted); }
+.map-legend-line span { display: inline-flex; align-items: center; gap: 6px; }
+.map-legend-line .dot { width: 10px; height: 10px; border-radius: 3px; }
+.map-tabs {
+  display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; margin: 0 -16px 12px; padding: 2px 16px 8px;
+}
+.map-tabs::-webkit-scrollbar { display: none; }
+.map-tab {
+  flex: none; max-width: 220px; height: 40px; padding: 0 16px; border-radius: 999px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  background: var(--play-card); color: var(--play-ink); border: 1.5px solid var(--play-line); box-shadow: 0 3px 0 var(--play-line);
+  font-family: inherit; font-weight: 800; font-size: 14px; cursor: pointer;
+}
+.map-tab.selected { background: var(--play-brand); border-color: var(--play-brand); color: #fff; box-shadow: 0 3px 0 var(--play-brand-deep); }
+.map-surahs { margin-bottom: 18px; }
+.map-sep { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding-top: 4px; }
+.map-sep span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.map-sep small { flex: none; font-size: 11px; letter-spacing: 0; text-transform: none; font-weight: 700; }
+.surah-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.surah-tile {
+  display: flex; flex-direction: column; align-items: stretch; gap: 1px; min-width: 0; text-align: left;
+  padding: 8px 9px 9px; border-radius: 14px; background: var(--play-card); color: var(--play-ink); font-family: inherit;
+  border: 1.5px solid var(--play-line); border-bottom: 4px solid var(--play-new);
+}
+button.surah-tile { cursor: pointer; }
+button.surah-tile:active { transform: translateY(2px); }
+.tile-n { font-size: 10px; font-weight: 800; color: var(--play-muted); }
+.tile-ar { font-family: Amiri, "Amiri Quran", serif; font-size: 19px; line-height: 1.9; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile-name { font-size: 11px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile-text {
+  font-size: 12px; font-weight: 700; line-height: 1.45; min-height: 2.9em; overflow: hidden;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere;
+}
+.tile-text:dir(rtl) { font-family: Amiri, "Amiri Quran", serif; font-size: 15px; line-height: 1.6; min-height: 3.2em; }
+.tile-bar { height: 5px; border-radius: 9px; background: var(--play-brand-soft); margin-top: auto; overflow: hidden; }
+.tile-text + .tile-bar, .tile-name + .tile-bar { margin-top: 5px; }
+.tile-bar i { display: block; height: 100%; background: var(--play-new); }
+.surah-tile.st-new { opacity: .72; }
+.surah-tile.st-anchor { border-bottom-color: var(--play-anchor); } .surah-tile.st-anchor .tile-bar i { background: var(--play-anchor); }
+.surah-tile.st-link { border-bottom-color: var(--play-link); } .surah-tile.st-link .tile-bar i { background: var(--play-link); }
+.surah-tile.st-solid { border-bottom-color: var(--play-solid); } .surah-tile.st-solid .tile-bar i { background: var(--play-solid); }
+.surah-tile.st-repair { border-bottom-color: var(--play-repair); } .surah-tile.st-repair .tile-bar i { background: var(--play-repair); }
+.dot.st-anchor { background: var(--play-anchor); } .dot.st-link { background: var(--play-link); }
+.dot.st-solid { background: var(--play-solid); } .dot.st-repair { background: var(--play-repair); }
+.badge-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(86px, 1fr)); gap: 14px 8px; }
+.badge { display: flex; flex-direction: column; align-items: center; gap: 7px; text-align: center; font-size: 11px; font-weight: 800; color: var(--play-muted); }
+.badge .medal { width: 58px; height: 58px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--play-card); border: 1.5px solid var(--play-line); box-shadow: 0 4px 0 var(--play-line); }
+.badge .medal .icon { width: 26px; height: 26px; }
+.badge.earned { color: var(--play-ink); }
+.badge.earned .medal { background: var(--play-gold); border-color: var(--play-gold-deep); box-shadow: 0 4px 0 var(--play-gold-deep); color: #3a2600; }
+.badge.earned .medal .icon { fill: #fff6d8; }
+
+@media (max-width: 380px) {
+  .goal-orb { width: 56px; height: 56px; }
+}
+@media (max-width: 330px) {
+  .surah-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .goal-lantern, .goal-node.current .goal-orb::after { animation: none; }
+}

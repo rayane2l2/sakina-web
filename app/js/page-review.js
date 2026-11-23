@@ -6,6 +6,16 @@ export const PAGE_RATINGS = Object.freeze({
   clean: "Propre", hesitant: "Hésitant", mistake: "Faute", blocked: "Bloqué",
 });
 
+// One "Je maîtrise" button: the circuits still need a rating, so it is deduced from how the page was mastered.
+// First try alone = clean; leaned on the audio = hesitant (useful difficulty);
+// had to start over = mistake (repair at D+1, D+3, D+7); started over 3 times or more = blocked (back to linking).
+export function masteryRating({ retries = 0, audioUsed = false } = {}) {
+  const n = Math.max(0, Math.trunc(Number(retries)) || 0);
+  if (n >= 3) return "blocked";
+  if (n >= 1) return "mistake";
+  return audioUsed ? "hesitant" : "clean";
+}
+
 const wordPages = new WeakMap();
 function indexWords(index) {
   if (!wordPages.has(index)) {

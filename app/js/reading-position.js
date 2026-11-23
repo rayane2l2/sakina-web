@@ -53,3 +53,15 @@ export class ReadingAlignment {
   return {...result,startWord:start,locating:false,words:[...words.slice(0,start).map(word=>({word,status:'waiting'})),...result.words]};
  }
 }
+
+// Free reading reached the last word of the displayed passage: the reciter is moving on.
+export function readingReachedEnd(words){
+ return words.length>0&&words.at(-1).status!=='waiting';
+}
+
+// Colours already earned on previous pages stay visible after the passage moves on.
+export function readingTrail(trail,refs,words){
+ const next=new Map(trail||[]);
+ refs.forEach((w,i)=>{const word=words[i];if(word&&word.status!=='waiting')next.set(`${w.s}:${w.a}:${w.w}`,word);});
+ return next;
+}

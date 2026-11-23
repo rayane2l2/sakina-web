@@ -1,4 +1,27 @@
 import { normalizeModel } from "./model-choice.js";
+import { AudioBacklog } from "./audio-backlog.js";
+
+const MODEL_RATE = 16000;
+const LAST_MODEL_PART = new URL("../models/v3.1/zipformer-04.bin", import.meta.url).href;
+
+// A 16 kHz context lets the browser resample natively, so a third of the audio reaches the
+// worker and the engine never resamples. Browsers that refuse it keep their own rate.
+function captureContext() {
+  try {
+    return new AudioContext({ sampleRate: MODEL_RATE });
+  } catch {
+    return new AudioContext();
+  }
+}
+
+// True when offline preparation already stored the model: warming it up costs no data.
+async function modelStored() {
+  try {
+    return Boolean(await globalThis.caches?.match(LAST_MODEL_PART));
+  } catch {
+    return false;
+  }
+}
 export class Recognition extends EventTarget {
   constructor(model = "v3.1") {
     super();
@@ -6,7 +29,7 @@ export class Recognition extends EventTarget {
     this.worker = null;
     this.loaded = false;
     this.active = false;
-    this.pending = 0;
+    this.backlog = new AudioBacklog();
     this.generation = 0;
   }
 
@@ -16,10 +39,34 @@ export class Recognition extends EventTarget {
 
   // Move the reading cursor without reloading the model or closing the microphone.
   resetSegment() {
-    this.pending = 0;
+    this.backlog.reset();
     const id = ++this.generation;
     if (this.loaded) this.worker?.postMessage({ type: "reset", id });
     return id;
+  }
+
+  // Loads the model in the background before the microphone is tapped, so the first tap
+  // answers at once. Only when the model is already stored on the device.
+  async prewarm() {
+    if (this.loaded || this.loading || this.prewarming) return;
+    this.prewarming = true;
+    try {
+      if (await modelStored()) await this.init();
+    } catch {
+      // A failed warm-up is retried by the real start, which reports the error.
+    } finally {
+      this.prewarming = false;
+    }
+  }
+
+  // Sends late audio as soon as the worker has digested the previous chunk.
+  release() {
+    const next = this.backlog.done();
+    if (next) this.send(next);
+  }
+
+  send({ samples, rate }) {
+    this.worker.postMessage({ type: "audio", samples, rate, id: this.generation }, [samples.buffer]);
   }
 
   async init() {
@@ -36,9 +83,9 @@ export class Recognition extends EventTarget {
           resolve();
         }
 
-        if (data.type === "result" && data.id === this.generation) {
-          this.pending = Math.max(0, this.pending - 1);
-          this.emit("result", data);
+        if ((data.type === "result" || data.type === "tick") && data.id === this.generation) {
+          this.release();
+          if (data.type === "result") this.emit("result", data);
         }
 
         if (data.type === "error") {
@@ -64,7 +111,7 @@ export class Recognition extends EventTarget {
     try {
       // Resume the audio context during the actual button gesture (Safari/WebView).
 
-      this.context = new AudioContext();
+      this.context = captureContext();
       await this.context.resume();
 
       await this.init();
@@ -86,7 +133,16 @@ export class Recognition extends EventTarget {
         new URL("./microphone-worklet.js", import.meta.url),
       );
 
-      this.source = this.context.createMediaStreamSource(this.media);
+      try {
+        this.source = this.context.createMediaStreamSource(this.media);
+      } catch {
+        // Some browsers cannot connect a microphone to a context at another rate.
+        await this.context.close();
+        this.context = new AudioContext();
+        await this.context.resume();
+        await this.context.audioWorklet.addModule(new URL("./microphone-worklet.js", import.meta.url));
+        this.source = this.context.createMediaStreamSource(this.media);
+      }
 
       this.capture = new AudioWorkletNode(this.context, "sakina-capture");
 
@@ -103,14 +159,6 @@ export class Recognition extends EventTarget {
         }
         if (!this.active) return;
 
-        if (this.pending > 80) {
-          this.stop(false);
-          this.emit(
-            "error",
-            "Le téléphone traite trop lentement. Essaie une portion plus courte.",
-          );
-          return;
-        }
 
         this.emit(
           "level",
@@ -119,16 +167,12 @@ export class Recognition extends EventTarget {
           ),
         );
 
-        this.pending++;
-        this.worker.postMessage(
-          {
-            type: "audio",
-            samples: data.samples,
-            rate: data.rate,
-            id: this.generation,
-          },
-          [data.samples.buffer],
-        );
+        const now = this.backlog.push(data.samples, data.rate);
+        if (now) this.send(now);
+        if (this.backlog.overflow) {
+          this.stop(false);
+          this.emit("error", "Le téléphone traite trop lentement. Essaie une portion plus courte.");
+        }
       };
 
       this.source.connect(this.capture);
@@ -188,8 +232,11 @@ export class Recognition extends EventTarget {
     }
     if (!finish)
       this.worker?.postMessage({ type: "cancel", id: ++this.generation });
-    if (wasActive && finish)
+    if (wasActive && finish) {
+      const rest = this.backlog.flush();
+      if (rest) this.send(rest);
       this.worker?.postMessage({ type: "finish", id: this.generation });
+    }
   }
   dispose() {
     this.stop(false);

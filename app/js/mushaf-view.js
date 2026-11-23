@@ -104,12 +104,8 @@ export function redrawMushaf() {
   const color = (name, fallback) => style.getPropertyValue("--mushaf-" + name).trim() || fallback;
   const palette = {
     "focus": color("focus", "#e8efff"),
-    "heard-bg": color("heard-bg", "#c7e5fa"),
-    "check-bg": color("check-bg", "#ffcfad"),
-    "waiting-bg": color("waiting-bg", "#b9b8b3"),
-    "heard-line": color("heard-line", "#005b9a"),
-    "check": color("check", "#a32f0c"),
-    "heard": color("heard", "#003e6d"),
+    "check": color("check", "#c62828"),
+    "heard": color("heard", "#0b7a43"),
     "ink": color("ink", "#17253b"),
     "ornament": color("ornament", "#7c7357"),
     "focus-soft": color("focus-soft", "#edf3fe"),
@@ -159,38 +155,6 @@ export function redrawMushaf() {
         c.beginPath();
         c.moveTo(b.x, b.y + b.height);
         c.lineTo(b.x + b.width, b.y + b.height);
-        c.stroke();
-      }
-      if (status === "heard" || status === "check") {
-        c.fillStyle =
-          status === "heard"
-            ? palette["heard-bg"]
-            : status === "check"
-              ? palette["check-bg"]
-              : palette["waiting-bg"];
-        c.beginPath();
-        c.roundRect(b.x, b.y, b.width, b.height, 2);
-        c.fill();
-      }
-      if (status === "heard" || status === "check") {
-        const bottom = b.y + b.height;
-        c.strokeStyle = status === "heard" ? palette["heard-line"] : palette["check"];
-        c.lineWidth = 1.3;
-        c.beginPath();
-        if (status === "heard") {
-          c.moveTo(b.x, bottom);
-          c.lineTo(b.x + b.width, bottom);
-        } else {
-          for (let x = b.x; x <= b.x + b.width; x += 2) {
-            const y = bottom + (Math.round((x - b.x) / 2) % 2) * 2;
-            if (x === b.x) c.moveTo(x, y);
-            else c.lineTo(x, y);
-          }
-          c.moveTo(b.x - 3, b.y);
-          c.lineTo(b.x, b.y + 3);
-          c.moveTo(b.x, b.y);
-          c.lineTo(b.x - 3, b.y + 3);
-        }
         c.stroke();
       }
     }

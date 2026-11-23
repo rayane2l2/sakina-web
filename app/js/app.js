@@ -86,8 +86,8 @@ import { circuitPlan, circuitOrder, maintenanceCycle, normalMaintenanceCycle } f
 import { PAGE_REVIEW as reviewRules } from "./revision-settings.js";
 import { fitCircuitBudget, forecastReview, pageMinutes, returnStatus, revisionAdvice, reviewMinutes } from "./revision-support.js";
 import { circuitMatnPlan, milestonePlan, rateMatnPortion, solidityGrid, weeklyPractice } from "./revision-practice.js";
-import { completedSurahChecks, eligibleMaintenancePages, markSurahCheck } from "./recitation-validation.js";
-import { pageCoverage, migratePageState, addLearnedPages, commitPageReviews, PAGE_RATINGS, seedProgrammeReview, startReviewCircuits } from "./page-review.js";
+import { eligibleMaintenancePages } from "./recitation-validation.js";
+import { pageCoverage, migratePageState, addLearnedPages, commitPageReviews, PAGE_RATINGS, seedProgrammeReview, startReviewCircuits, masteryRating } from "./page-review.js";
 import {
   learningTargets,
   listeningGoal,
@@ -129,8 +129,23 @@ import { PLAYBACK_SPEEDS, speedLabel } from "./playback-speed.js";
 import { AlignmentClient } from "./alignment-client.js";
 import { wordHidden } from "./word-display.js";
 import { Recognition } from "./recognition.js";
-import { nextReadingWord } from "./reading-position.js";
+import { nextReadingWord, readingReachedEnd, readingTrail } from "./reading-position.js";
+import { bindReaderChrome, resetReaderChrome } from "./reader-chrome.js";
 import * as audio from "./audio.js";
+import {
+  starsFor,
+  updateDailyGoal,
+  goalProgress,
+  updateStreak,
+  currentStreak,
+  knownAyahs,
+  pageStates,
+  quranMap,
+  badges,
+  memoStatus,
+  mapSections,
+} from "./gamification.js";
+import { statsRow, dailyGoalHTML, quranMapHTML, drawGoalPath } from "./today-view.js";
 let freeReadingSaveTimer;
 let retryFrontierKey = null;
 const mistakes = new StableMistakes(),
@@ -158,6 +173,11 @@ const icons = {
   play: '<path d="m8 4 13 8-13 8z"/>',
   arrow: '<path d="M4 12h16m-6-6 6 6-6 6"/>',
   check: '<path d="m5 12 4 4L20 5"/>',
+  map: '<path d="M3 6.5 9 4l6 2.5L21 4v13.5L15 20l-6-2.5L3 20zM9 4v13.5m6-11V20"/>',
+  lamp: '<path d="M10 2.5h4M8 5h8l1.2 3H6.8zM7 8h10v10a2.5 2.5 0 0 1-2.5 2.5h-5A2.5 2.5 0 0 1 7 18z"/><path d="M12 11.5c1.4 1.6 2 2.7 2 3.6a2 2 0 1 1-4 0c0-.9.6-2 2-3.6z"/>',
+  star: '<path d="m12 3 2.7 5.6 6.1.8-4.5 4.2 1.1 6.1L12 16.8l-5.4 2.9 1.1-6.1-4.5-4.2 6.1-.8z"/>',
+  download: '<path d="M12 4v11m-4.5-4.5L12 15l4.5-4.5M5 19.5h14"/>',
+  lock: '<rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/>',
 };
 const icon = (name, cls = "") =>
   `<svg class="icon ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name] || icons.book}</svg>`;
@@ -175,6 +195,7 @@ let db = load(),
     reveal: false,
   },
   session = null,
+  mapTab = "quran",
   recognition = new Recognition(db.settings.recognitionModel),
   voice = { status: "idle", text: "", final: false, result: null },
   playing = null,
@@ -240,7 +261,29 @@ const button = (label, action, cls = "", data = "") =>
 const title = (label) =>
   `<header class="page-title"><h1>${label}</h1></header>`;
 const masthead = () =>
-  `<header class="masthead">${view !== "home" ? button("‹", "back", "app-back", 'aria-label="Retour au menu précédent"') : ""}${brand()}${button(icon("settings"), "nav", "settings-link", 'data-view="settings" aria-label="Mon espace"')}</header>`;
+  `<header class="masthead">${view !== "home" ? button("‹", "back", "app-back", 'aria-label="Retour au menu précédent"') : ""}${brand()}${offlineBadge()}${button(icon("settings"), "nav", "settings-link", 'data-view="settings" aria-label="Mon espace"')}</header>`;
+// Small download icon with a circular progress ring, instead of the old "Préparation hors connexion" card.
+const RING = 2 * Math.PI * 19;
+const BADGE_VIEWS = ["home", "map", "library", "programs", "settings"];
+const offlineShare = () => (offlineTotal ? Math.min(1, offlineCount / offlineTotal) : 0);
+const offlineLabel = () =>
+  offlineReady ? "Disponible hors connexion"
+    : offlineBusy ? `Préparation hors connexion · ${Math.round(100 * offlineShare())} %`
+      : "Préparer le mode hors connexion";
+function offlineBadge() {
+  const state = offlineReady ? "ready" : offlineBusy ? "busy" : "idle";
+  const offset = (RING * (1 - (offlineReady ? 1 : offlineShare()))).toFixed(1);
+  return `<button type="button" id="offline-badge" class="offline-badge ${state}" data-action="${offlineReady ? "offline-info" : "offline"}" aria-label="${offlineLabel()}" title="${offlineLabel()}">
+    <svg class="offline-ring" viewBox="0 0 44 44" aria-hidden="true"><circle class="ring-bg" cx="22" cy="22" r="19"/><circle class="ring-fg" cx="22" cy="22" r="19" stroke-dasharray="${RING.toFixed(1)}" stroke-dashoffset="${offset}" transform="rotate(-90 22 22)"/></svg>
+    ${icon(offlineReady ? "check" : "download")}</button>`;
+}
+function updateOfflineBadge() {
+  const badge = document.querySelector("#offline-badge");
+  if (!badge) return;
+  badge.querySelector(".ring-fg")?.setAttribute("stroke-dashoffset", (RING * (1 - offlineShare())).toFixed(1));
+  badge.setAttribute("aria-label", offlineLabel());
+  badge.title = offlineLabel();
+}
 const planCache = new WeakMap();
 function prog(p) {
   const date = day();
@@ -267,8 +310,8 @@ function programmePlan(p, date) {
     ? [] : quranLessonPortion(proposed, corpora.quran.sections);
   return { ...plan, fresh, endsAtSurahBoundary: fresh.length > 0 && fresh.length < proposed.length };
 }
-const surahChecks = programme => completedSurahChecks(programme, corpora.quran.sections, resolveQuran);
-const pendingSurahs = programme => new Set(surahChecks(programme).filter(s => s.status === "pending").map(s => s.id));
+// Finished surahs go straight into maintenance: there is no "recite to someone" gate any more.
+const pendingSurahs = () => new Set();
 
 function quranCircuitPlan(programme, date) {
   const fresh = M.nextNew(programme.memo, date);
@@ -348,6 +391,7 @@ function progress(p) {
 function nav() {
   return `<nav class="nav" aria-label="Navigation principale">${[
     ["home", "home", "Aujourd’hui"],
+    ["map", "map", "Ma carte"],
     ["library", "book", "Bibliothèque"],
     ["programs", "layers", "Programmes"],
   ]
@@ -529,7 +573,7 @@ function render() {
     view === "reader" && printedLearning(),
   );
   layoutObserver?.disconnect();
-  root.innerHTML = `<div class="shell ${view === "reader" ? "reading" : bookStudy ? "book-study" : wizardOpen ? "wizard-shell" : ""}">${view !== "reader" && !bookStudy && !wizardOpen ? masthead() : ""}${view === "home" ? home() : view === "finish-surah" ? finishSurahPage() : view === "library" ? library() : view === "programs" ? programs() : view === "new" ? newProgram() : view === "books" ? books.render() : view === "reader" ? readerView() : settings()}</div>${view !== "reader" && !bookStudy && !wizardOpen ? nav() : ""}`;
+  root.innerHTML = `<div class="shell ${view === "reader" ? "reading" : bookStudy ? "book-study" : wizardOpen ? "wizard-shell" : `app-screen view-${view}`}">${view !== "reader" && !bookStudy && !wizardOpen ? masthead() : ""}${view === "home" ? home() : view === "finish-surah" ? finishSurahPage() : view === "library" ? library() : view === "map" ? mapView() : view === "programs" ? programs() : view === "new" ? newProgram() : view === "books" ? books.render() : view === "reader" ? readerView() : settings()}</div>${view !== "reader" && !bookStudy && !wizardOpen ? nav() : ""}`;
   if (view === "new") guide().mountPicker();
   const nextVerseScroll = root.querySelector('.quran-verse-scroll');
   if (nextVerseScroll && !session) {
@@ -552,6 +596,8 @@ function render() {
   });
   const matnDocument=root.querySelector('.matn-library-scroll');if(matnDocument){matnDocument.scrollTop=reader.matnScroll||0;if(reader.followMatnOnReturn||reader.matnScroll==null){const id=section(currentCorpus(),reader.sid)?.units[reader.index]?.id,target=matnDocument.querySelector(`[data-matn-unit="${CSS.escape(id||'')}"]`);if(target)matnDocument.scrollTop+=target.getBoundingClientRect().top-matnDocument.getBoundingClientRect().top-12;reader.followMatnOnReturn=false;}}
   if (view === "books") books.afterRender();
+  if (view === "home") drawGoalPath(root);
+  if (view === "reader" && micUsed() && recognitionAvailable(currentCorpus(), session?.current)) void recognition.prewarm();
   const hadith = root.querySelector(".hadith-page");
   if (hadith && previousHadith?.lang === hadith.lang) hadith.scrollTop = hadithTop;
   if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
@@ -579,8 +625,18 @@ function render() {
     openSpeed();
     if (speedFocused) document.querySelector("#playback-speed")?.focus();
   }
+  if (view === "reader")
+    bindReaderChrome(root, {
+      enabled:
+        currentCorpus() === "quran" &&
+        Boolean(root.querySelector(".reader-head")) &&
+        !voice.error,
+    });
+  else resetReaderChrome();
   if (view === "reader") {
     const stage = document.querySelector("#reader-stage");
+    // The printed pages only depend on the width: a taller stage (bars hidden) keeps them.
+    let mushafWidth = null;
     const mount = () => {
       if (view !== "reader" || !stage.isConnected) return;
       const next = { width: stage.clientWidth, height: stage.clientHeight },
@@ -598,6 +654,8 @@ function render() {
         return;
       }
       if (verseMode()) return;
+      if (mushafWidth !== null && Math.abs(next.width - mushafWidth) <= 5) return;
+      mushafWidth = next.width;
       const sheets = readerSheets(),
         sheet = sheets[Math.min(reader.sheet || 0, sheets.length - 1)];
       mountMushaf({
@@ -614,7 +672,7 @@ function render() {
         pageNumbers: session ? sheets.map(s=>s.page) : Array.from({length:604},(_,i)=>i+1),
         initialPage: sheet.page,
         scrollTop: Number(mushafPage)===sheet.page ? mushafTop : null,
-        onPage: (page)=>{const host=root.querySelector("#printed-mushaf");if(host)host.dataset.currentPage=page;if(session){const index=sheets.findIndex(s=>s.page===page);if(index>=0)reader.sheet=index;}else{if(!recognition.active){reader.page=page;const unit=pageUnits.find(u=>u.page===page);if(unit?.wordRefs[0])reader.sid=String(unit.wordRefs[0].s);if(db.freeReading?.page!==page){db.freeReading=readingPlace(reader,"quran");clearTimeout(freeReadingSaveTimer);freeReadingSaveTimer=setTimeout(stateSave,200);}}const title=root.querySelector(".reader-head h1"),subtitle=root.querySelector(".reader-head .small");if(title)title.textContent=section("quran",reader.sid).name;if(subtitle)subtitle.textContent=`Page ${page} · lecture libre`;const position=root.querySelector(".quran-page-position");if(position)position.textContent=`${page} / 604`;}},
+        onPage: (page)=>{const host=root.querySelector("#printed-mushaf");if(host)host.dataset.currentPage=page;if(session){const index=sheets.findIndex(s=>s.page===page);if(index>=0)reader.sheet=index;}else{if(!recognition.active){reader.page=page;const unit=pageUnits.find(u=>u.page===page);if(unit?.wordRefs[0])reader.sid=String(unit.wordRefs[0].s);if(db.freeReading?.page!==page){db.freeReading=readingPlace(reader,"quran");clearTimeout(freeReadingSaveTimer);freeReadingSaveTimer=setTimeout(stateSave,200);}}const title=root.querySelector(".reader-head h1"),subtitle=root.querySelector(".reader-head .small");if(title)title.textContent=section("quran",String(pageUnits.find(u=>u.page===page)?.wordRefs[0]?.s??reader.sid)).name;if(subtitle)subtitle.textContent=`Page ${page} · lecture libre`;const position=root.querySelector(".quran-page-position");if(position)position.textContent=`${page} / 604`;}},
         statuses: statusesFor(session ? currentUnits() : corpora.quran.sections.flatMap(s=>s.units)),
         revealedAyahs: reader.revealedAyahs || [],
         onVerse: (id) => {
@@ -709,10 +767,12 @@ function statusesFor(units) {
   for (const u of currentUnits())
     for (const w of u.wordRefs || [])
       map.set(`${w.s}:${w.a}:${w.w}`, voice.result?.words[i++]);
+  const trail = session ? null : voice.trail;
   return units.flatMap((u) =>
     (u.wordRefs || []).map(
       (w) =>
-        map.get(`${w.s}:${w.a}:${w.w}`) || { word: w.text, status: "waiting" },
+        map.get(`${w.s}:${w.a}:${w.w}`) ||
+        trail?.get(`${w.s}:${w.a}:${w.w}`) || { word: w.text, status: "waiting" },
     ),
   );
 }
@@ -881,15 +941,13 @@ function home() {
       programme: p,
     };
   });
-  const candidates = dailyCandidates([...memorisation, ...books.dailyItems()]),
-    first = candidates[0];
-  const actionAttrs = (p) =>
-    p.kind === "book"
-      ? `data-book-action="start" data-id="${esc(p.id)}"`
-      : `data-action="start" data-id="${esc(p.id)}"`;
+  const allItems = [...memorisation, ...books.dailyItems()],
+    candidates = dailyCandidates(allItems),
+    first = candidates[0],
+    play = syncPlay(allItems);
   const main = first
     ? `<section class="card today-card"><span class="tag">MA SÉANCE · ${first.kind === "book" ? "QUESTIONS-RÉPONSES" : esc(corpusName(corpora[first.programme.corpus]))}</span><h2>${esc(first.name)}</h2><p class="small muted">${first.kind === "book" ? questionSummary(first.review, first.fresh, first.waitingUntil) : `${esc(dailySummary(first.programme))}`}</p><button class="btn primary block" ${actionAttrs(first)}>${first.resume ? "Reprendre ma séance" : "Commencer ma séance"} ${icon("arrow")}</button></section>`
-    : `<section class="card today-card"><h2>${db.programs.length || books.hasPrograms() ? "C’est tout pour aujourd’hui." : "Que veux-tu faire ?"}</h2>${db.programs.length || books.hasPrograms() ? button("Mes programmes", "nav", "secondary block", 'data-view="programs"') : `<div class="first-choices">${button("Lire le Coran", "read-quran", "primary block")}${button("Apprendre et réviser", "nav", "secondary block", 'data-view="programs"')}</div>`}</section>`;
+    : `<section class="card today-card"><h2>${db.programs.length || books.hasPrograms() ? "C’est tout pour aujourd’hui." : "Que veux-tu faire ?"}</h2>${db.programs.length || books.hasPrograms() ? button("Mes programmes", "nav", "secondary block", 'data-view="programs"') : `<div class="first-choices">${choiceTile("Lire le Coran", "Le Mushaf, page par page", "book", "read-quran", "blue")}${choiceTile("Apprendre et réviser", "Un programme guidé, jour après jour", "layers", "nav", "gold", 'data-view="programs"')}</div>`}</section>`;
   const bonus = db.programs.flatMap(program => {
     const offer = finishSurahOffer(program);
     if (!offer) {
@@ -902,14 +960,123 @@ function home() {
       <p>${count} verset${count > 1 ? "s" : ""} à apprendre</p>
       ${button("Voir les derniers versets", "offer-surah-ending", "secondary block", `data-id="${esc(program.id)}"`)}</section>`];
   }).join("");
-  return `<h1 class="home-heading">Prends un instant.<br>Il est pour toi.</h1>${first || !bonus ? main : ""}${bonus}${readingResumeButton()}${offlineReady ? "" : `<section class="card offline-invite"><span class="tag">SUR CET APPAREIL</span><h2>Préparation hors connexion</h2><p class="small muted">Téléchargement automatique. Les fichiers déjà présents sont conservés.</p>${button(offlineBusy ? "Préparation en cours…" : "Reprendre la préparation", "offline", "secondary block", offlineBusy ? "disabled" : "")}<p id="offline-progress" class="small muted" role="status">${offlineBusy ? `${offlineDownloaded} téléchargés · ${offlineReused} conservés` : "La préparation reprend là où elle s’est arrêtée."}</p></section>`}<div class="daily-other">${candidates
-    .slice(1)
+  const hasProgrammes = Boolean(db.programs.length || books.hasPrograms());
+  const today = play.progress.total
+    ? dailyGoalHTML({ progress: play.progress, items: goalItems(play, allItems, candidates), streak: play.streak }, esc, icon)
+    : first || !bonus ? main : "";
+  const others = play.progress.total ? [] : candidates.slice(1);
+  return `${homeHello(hasProgrammes, play)}${hasProgrammes ? statsRow(play, icon) : ""}${today}${play.progress.total ? "" : bonus}<div class="daily-other">${others
     .map(
       (p) =>
         `<button class="review-row" ${actionAttrs(p)}>${icon("book")}<span>${esc(p.name)}</span>${icon("arrow")}</button>`,
     )
     .join("")}</div>`;
 }
+function homeHello(hasProgrammes, play) {
+  const hour = new Date().getHours(),
+    hello = hour < 5 ? "Bonne nuit" : hour < 12 ? "Bonjour" : hour < 18 ? "Bon après-midi" : "Bonsoir";
+  const line = !hasProgrammes
+    ? "Prends un instant, il est pour toi."
+    : play.progress.complete
+      ? "Bravo, ta journée est faite."
+      : "Ta séance t’attend.";
+  return `<header class="home-hello"><p>${hello}</p><h1>${line}</h1></header>`;
+}
+const choiceTile = (label, hint, glyph, action, tone, data = "") =>
+  `<button class="choice-tile tone-${tone}" data-action="${action}" ${data}><span class="choice-icon">${icon(glyph)}</span><span class="choice-text"><b>${label}</b><small>${hint}</small></span>${icon("arrow")}</button>`;
+const actionAttrs = (p) =>
+  p.kind === "book"
+    ? `data-book-action="start" data-id="${esc(p.id)}"`
+    : `data-action="start" data-id="${esc(p.id)}"`;
+const itemKey = (p) => `${p.kind}:${p.id}`;
+// Work that can be done now; a book card that only comes back later does not count.
+const hasWorkNow = (p) => !p.paused && !p.archived && Boolean(p.review || p.fresh || p.resume);
+// A session ended early ("Terminer pour aujourd’hui") is not a reached goal.
+const stoppedToday = (p) => p.kind === "memo" && p.programme.endedEarlyOn === day();
+
+// Daily goal, lantern and stars. Persists only the goal snapshot and the streak.
+function syncPlay(allItems) {
+  const date = day(),
+    active = allItems.filter((p) => !p.paused && !p.archived),
+    pending = active.filter((p) => hasWorkNow(p) || stoppedToday(p)),
+    // Work finished elsewhere (reader, matn, book) still belongs to today's goal.
+    touched = (p) => (p.kind === "memo" ? p.programme.lastStudyOn === date : p.studiedToday),
+    withWork = pending.map(itemKey),
+    plannedNow = active.filter((p) => pending.includes(p) || touched(p)).map(itemKey);
+  const goal = updateDailyGoal(db.dailyGoal, date, plannedNow);
+  const progress = goalProgress(goal, withWork, active.map(itemKey));
+  const rest = progress.total === 0 && active.length > 0;
+  const streak = updateStreak(db.streak, date, { complete: progress.complete, rest });
+  if (goal !== db.dailyGoal || streak !== db.streak) {
+    const litBefore = db.streak?.last === date && db.streak?.restOn !== date;
+    const lit = progress.complete && streak.last === date && !litBefore;
+    db = { ...db, dailyGoal: goal, streak };
+    stateSave();
+    if (lit) setTimeout(() => toast(`Objectif du jour atteint ! Ta lanterne brille depuis ${streak.count} jour${streak.count > 1 ? "s" : ""}.`), 300);
+  }
+  return {
+    progress,
+    streak: currentStreak(streak, date),
+    starsToday: starsFor(db.programs, date),
+    starsTotal: starsFor(db.programs),
+  };
+}
+
+function goalItems(play, allItems, candidates) {
+  const byKey = new Map(allItems.map((p) => [itemKey(p), p]));
+  const current = candidates.find(hasWorkNow);
+  return play.progress.items.map(({ key, done }) => {
+    const p = byKey.get(key),
+      book = p.kind === "book",
+      stopped = !done && stoppedToday(p);
+    return {
+      name: p.name,
+      done,
+      stopped,
+      current: current && itemKey(current) === key,
+      resume: p.resume,
+      tag: book ? "Questions-réponses" : corpusName(corpora[p.programme.corpus]),
+      summary: done ? "Séance du jour terminée" : stopped ? "Séance arrêtée pour aujourd’hui · reprends demain" : book ? questionSummary(p.review, p.fresh, p.waitingUntil) : dailySummary(p.programme),
+      icon: book || p.programme.corpus === "quran" ? "book" : "layers",
+      attrs: actionAttrs(p),
+      // Every finished programme can go further today: more lessons, the end of a surah, or free book practice.
+      extra: !done ? null : book
+        ? { label: "Continuer aujourd’hui", attrs: `data-book-action="practice" data-id="${esc(p.id)}"` }
+        : extraAction(p.programme),
+    };
+  });
+}
+
+// Optional extra work once today's session is done, shown on the goal node itself.
+function extraAction(program) {
+  const offer = finishSurahOffer(program);
+  if (offer) return { label: `Terminer ${offer.surah.name}`, attrs: `data-action="offer-surah-ending" data-id="${esc(program.id)}"` };
+  if (canContinueToday(program)) return { label: "Continuer aujourd’hui", attrs: `data-action="start-extra-lesson" data-id="${esc(program.id)}"` };
+  return null;
+}
+
+// "Ma carte": one map for the whole Quran, then one per matn programme and per book programme.
+function mapView() {
+  const quran = db.programs.filter((p) => p.corpus === "quran" && !p.archived);
+  const map = quranMap(corpora.quran.sections, knownAyahs(quran, resolveQuran), pageStates(quran));
+  const matns = db.programs.filter((p) => p.corpus !== "quran" && !p.archived && corpora[p.corpus]).map(matnMap);
+  const others = [...matns, ...books.mapPrograms()];
+  const tab = others.some((m) => m.id === mapTab) ? mapTab : "quran";
+  return quranMapHTML({ map, others, tab, earned: badges(map, db.streak), hasQuran: quran.length > 0 }, esc, icon);
+}
+
+// A matn programme's passages in text order, cut by chapter, each coloured by its spacing.
+function matnMap(p) {
+  const items = p.memo?.items || {},
+    scope = new Set([...(p.memo?.queue || []), ...Object.keys(items)]);
+  const cells = corpora[p.corpus].sections.flatMap((section) =>
+    section.units
+      .filter((u) => scope.has(u.id))
+      .map((u) => ({ n: u.n, text: String(u.text || "").slice(0, 80), chapter: section.name, sid: section.id, status: memoStatus(items[u.id]) })),
+  );
+  return { id: p.id, corpus: p.corpus, name: p.name, title: corpusName(corpora[p.corpus]), ...mapSections(cells, (c) => c.chapter) };
+}
+
 function revisionDetails(programme) {
   if (programme.corpus !== "quran") return "";
   const plan = prog(programme);
@@ -956,7 +1123,7 @@ function library() {
   const detail = corpus ? `<div class="library-title-row">${button("‹ Moutoun", "corpus", "text", 'data-corpus="matns"')}<h2>${esc(corpus.name)}</h2>${corpus.shortTitleAr || corpus.titleAr ? `<p class="small muted library-work-subtitle"><bdi lang="ar" dir="rtl">${esc(corpus.shortTitleAr || corpus.titleAr)}</bdi></p>` : ""}</div>
     ${button("Écouter en entier", "listen-entire", "secondary block", `data-corpus="${corpus.id}"`)}` : "";
   const page = category === "quran" ? `<div class="page-jump"><label for="page-number">Mushaf · 604 pages</label><div><input type="number" id="page-number" min="1" max="604" value="${reader.page || 1}" aria-label="Numéro de page">${button("Ouvrir la page", "jump-page", "secondary compact")}</div></div>` : "";
-  return `${title("Bibliothèque")}<div class="seg library-categories" role="group" aria-label="Catégories de la bibliothèque">${picker}</div>
+  return `${title("Bibliothèque")}${readingResumeButton()}<div class="seg library-categories" role="group" aria-label="Catégories de la bibliothèque">${picker}</div>
     <label class="search">${icon("book")}<input id="search" type="search" placeholder="Rechercher une sourate, un matan, un livre…" value="${esc(search)}"></label>
     ${detail}${corpus?.reviewStatus === "needs_review" ? '<p class="small muted">Texte importé · relecture à terminer.</p>' : ""}${page}<div id="section-list">${libraryResults()}</div>`;
 }
@@ -995,26 +1162,9 @@ function sectionRows(c, empty = false) {
       .join("") || (empty ? "" : '<p class="muted">Aucun passage trouvé.</p>')
   );
 }
-function validationCard(programmes) {
-  const rows = programmes.filter(p => p.corpus === "quran").flatMap(p =>
-    surahChecks(p).filter(s => s.status !== "corrected").map(s => ({...s, programme:p})));
-  if (!rows.length) return "";
-  return `<section class="card surah-checks"><h2>Réciter à quelqu’un</h2>
-    <p>Avant l’entretien, récite la sourate à une personne qui la connaît et qui peut corriger ta récitation et ton tajwid.</p>
-    ${rows.map(({id,name,status,programme}) => {
-      const attrs = `data-id="${esc(programme.id)}" data-surah="${esc(id)}"`;
-      return `<div class="surah-check"><strong>${esc(name)}</strong>
-        <small>${esc(programme.name)} · ${status === "pending" ? "En attente avant l’entretien" : "Déjà en entretien"}</small>
-        <p>As-tu récité cette sourate à une personne qui peut te corriger ?</p>
-        ${button("Oui, ma récitation a été vérifiée", "confirm-surah-check", "secondary block", attrs)}
-        ${status === "pending" ? button("Ajouter à l’entretien sans correction", "skip-surah-check", "text block", attrs) : ""}
-      </div>`;
-    }).join("")}</section>`;
-}
-
 function programs() {
   const g = programmeGroups(db.programs);
-  return `${title("Programmes")}<div class="section-head">${button("Créer un programme", "new", "primary block")}</div>${g.active.map(programCard).join("")}${validationCard(g.active)}${g.paused.length ? `<details class="programme-fold"><summary>En pause · ${g.paused.length}</summary>${g.paused.map(programCard).join("")}</details>` : ""}${g.archived.length ? `<details class="programme-fold"><summary>Archivés · ${g.archived.length}</summary>${g.archived.map(programCard).join("")}</details>` : ""}${books.programCards()}`;
+  return `${title("Programmes")}<div class="section-head">${button("Créer un programme", "new", "primary block")}</div>${g.active.map(programCard).join("")}${g.paused.length ? `<details class="programme-fold"><summary>En pause · ${g.paused.length}</summary>${g.paused.map(programCard).join("")}</details>` : ""}${g.archived.length ? `<details class="programme-fold"><summary>Archivés · ${g.archived.length}</summary>${g.archived.map(programCard).join("")}</details>` : ""}${books.programCards()}`;
 }
 
 let draft = {
@@ -1219,6 +1369,7 @@ function readerView() {
         matn:corpus !== "quran",
         unitName:corpora[corpus].unit,
         unitNumber:units[0].n,
+        retries: session?.pageRetries || 0,
         verses: pageReview.ayahs.map(id => ({
           id,
           text: corpus === "quran" ? resolveQuran(id)?.wordRefs.filter(w => pageReview.words.includes(wordKey(w))).map(w => w.text).join(" ") || "" : findUnit(corpus,id)?.text || "",
@@ -1284,7 +1435,6 @@ function readerView() {
           : corpus === "quran"
             ? ""
             : sheet.units.map((u) => verseHTML(corpus, u, hidden)).join(""),
-      bookmarked: db.bookmarks.includes(corpus + "/" + units[0].id),
       first:
         corpus === "quran"
           ? reader.page <= 1
@@ -1436,24 +1586,7 @@ function settings() {
     )
     .join(
       "",
-    )}</select></label><label>Voix des mots<select id="word-voice"><option value="quran-com" ${wordVoice(db.settings.wordVoice) === "quran-com" ? "selected" : ""}>Mots détachés · Quran.com</option><option value="minshawi" ${wordVoice(db.settings.wordVoice) === "minshawi" ? "selected" : ""}>Minshawi · extraits</option></select></label><label class="sound-choice"><input type="checkbox" id="mistake-sound" ${db.settings.mistakeSound !== false ? "checked" : ""}> Son discret pour les écarts stables</label><label>Répétitions en lecture libre<input type="number" id="repeat" min="1" max="20" value="${db.settings.repeat}"></label></section><section class="card"><h2>Sauvegarde</h2><div class="row">${button("Exporter", "export", "secondary")}<label class="btn secondary file-label">Importer<input type="file" id="backup-file" accept="application/json" hidden></label></div>${button("Installer Sakina.me", "install", "text block")}<p class="small muted">Sur iPhone : Safari → Partager → Sur l’écran d’accueil.</p></section><section class="card"><h2>Favoris</h2>${
-    db.bookmarks.length
-      ? db.bookmarks
-          .map((key) => {
-            const [c, id] = key.split("/"),
-              u = findUnit(c, id);
-            return u
-              ? button(
-                  esc(section(c, id.split(":")[0]).name) + " · " + u.n,
-                  "open-unit",
-                  "text block",
-                  `data-corpus="${c}" data-id="${id}"`,
-                )
-              : "";
-          })
-          .join("")
-      : '<p class="muted">Une étoile dans la lecture, et tu retrouves ton passage ici.</p>'
-  }</section><details class="card"><summary>À propos du suivi vocal</summary><p class="small muted">Sakina.me · version 1.34.0</p><p>Zipformer Quran v3.1 · Quran Lab, via ReciteQuran et le moteur local sherpa-onnx. Reconnaissance des phonèmes en Hafs. Retours expérimentaux, sans validation automatique du tajwid.</p><p>Application personnelle et gratuite. Aucune publicité, aucun compte, aucun envoi d’audio.</p><a href="vendor/LICENSE-ReciteQuran.txt">Conditions ReciteQuran</a> · <a href="THIRD_PARTY_NOTICES.txt">Sources et licences</a></details>`;
+    )}</select></label><label>Voix des mots<select id="word-voice"><option value="quran-com" ${wordVoice(db.settings.wordVoice) === "quran-com" ? "selected" : ""}>Mots détachés · Quran.com</option><option value="minshawi" ${wordVoice(db.settings.wordVoice) === "minshawi" ? "selected" : ""}>Minshawi · extraits</option></select></label><label class="sound-choice"><input type="checkbox" id="mistake-sound" ${db.settings.mistakeSound !== false ? "checked" : ""}> Son discret pour les écarts stables</label><label>Répétitions en lecture libre<input type="number" id="repeat" min="1" max="20" value="${db.settings.repeat}"></label></section><section class="card"><h2>Sauvegarde</h2><div class="row">${button("Exporter", "export", "secondary")}<label class="btn secondary file-label">Importer<input type="file" id="backup-file" accept="application/json" hidden></label></div>${button("Installer Sakina.me", "install", "text block")}<p class="small muted">Sur iPhone : Safari → Partager → Sur l’écran d’accueil.</p></section><details class="card"><summary>À propos du suivi vocal</summary><p class="small muted">Sakina.me · version 1.34.0</p><p>Zipformer Quran v3.1 · Quran Lab, via ReciteQuran et le moteur local sherpa-onnx. Reconnaissance des phonèmes en Hafs. Retours expérimentaux, sans validation automatique du tajwid.</p><p>Application personnelle et gratuite. Aucune publicité, aucun compte, aucun envoi d’audio.</p><a href="vendor/LICENSE-ReciteQuran.txt">Conditions ReciteQuran</a> · <a href="THIRD_PARTY_NOTICES.txt">Sources et licences</a></details>`;
 }
 async function resetVoice() {
   errorStreak.reset();
@@ -1486,12 +1619,72 @@ function moveReadingCursor(startWord = null) {
     result: null,
   };
 }
+// Free reading follows the reciter onto the next page (al-Fatiha into al-Baqara, and so on)
+// without restarting the microphone: the transcript heard so far is set aside and the
+// next page is located from what comes next.
+function continueFreeReading(units, words) {
+  if (reader.page >= 604) return;
+  voice = {
+    ...voice,
+    trail: readingTrail(voice.trail, units.flatMap((u) => u.wordRefs || []), words),
+    offset: voice.text.length,
+    result: null,
+  };
+  reader.page += 1;
+  reader.anchorId = null;
+  reader.voiceStartWord = null;
+  const first = pageUnits.find((u) => u.page === reader.page)?.wordRefs[0];
+  if (first) reader.sid = String(first.s);
+  alignment.reset();
+  errorStreak.reset();
+  retryMistakes.reset();
+  mistakes.reset();
+  retryFrontierKey = null;
+  db.freeReading = readingPlace(reader, "quran");
+  clearTimeout(freeReadingSaveTimer);
+  freeReadingSaveTimer = setTimeout(stateSave, 200);
+  if (verseMode()) {
+    render();
+    return;
+  }
+  if (first) centerMushafVerse(`${first.s}:${first.a}`, reader.page, first.w);
+}
 function ensureMode() {
   if (!recognitionAvailable(currentCorpus(), session?.current))
     throw Error(
       "La reconnaissance est proposée uniquement en révision et en lecture libre du Coran.",
     );
 }
+// Word colours are repainted at most once per frame, from the latest comparison only.
+let voicePaint = null;
+function paintVoice(job) {
+  const idle = !voicePaint;
+  voicePaint = job;
+  if (!idle) return;
+  requestAnimationFrame(() => {
+    const run = voicePaint;
+    voicePaint = null;
+    run?.();
+  });
+}
+
+// Someone who already used the microphone gets the model warmed up before tapping it.
+const MIC_USED = "sakina.mic-used";
+function micUsed() {
+  try {
+    return localStorage.getItem(MIC_USED) === "1";
+  } catch {
+    return false;
+  }
+}
+function rememberMicUse() {
+  try {
+    localStorage.setItem(MIC_USED, "1");
+  } catch {
+    // Private mode: the model simply loads on the first tap, as before.
+  }
+}
+
 function attachRecognition() {
   recognition.addEventListener("result", ({ detail: r }) => {
     if (view !== "reader") return;
@@ -1499,7 +1692,8 @@ function attachRecognition() {
     voice.final = r.final;
     if (r.final) voice.status = "done";
     const units = currentUnits(),
-      corpus = currentCorpus();
+      corpus = currentCorpus(),
+      passage = voice;
     const referenceWords = [],
       texts = [];
     for (const u of units) {
@@ -1515,7 +1709,7 @@ function attachRecognition() {
       {
         words: texts,
         referenceWords,
-        heard: voice.text,
+        heard: session ? voice.text : voice.text.slice(voice.offset || 0),
         final: voice.final && Boolean(session),
         settled: voice.final,
         freeReading:
@@ -1526,7 +1720,9 @@ function attachRecognition() {
             : (reader.voiceStartWord ?? null),
         epoch: recognition.generation,
       },
-      (comparison) => {
+      (comparison) => paintVoice(() => {
+        // Free reading already moved on to the next page: this answer is about the old one.
+        if (!session && voice !== passage) return;
         if (
           session?.current.kind === "review" &&
           reader.reviewStartWord > 0 &&
@@ -1618,8 +1814,15 @@ function attachRecognition() {
           navigator.vibrate?.([180, 80, 180, 80, 280]);
           toast("Ce mot accroche : prends le temps de le réécouter.");
         } else if (ordinary) mistakeSound();
+        if (
+          !session &&
+          corpus === "quran" &&
+          recognition.active &&
+          readingReachedEnd(comparison.words)
+        )
+          continueFreeReading(units, comparison.words);
         updateVoiceDOM();
-      },
+      }),
       (error) => {
         voice.error = error;
         updateVoiceDOM();
@@ -2174,9 +2377,6 @@ async function advanceMastered() {
             {ids:[previous,next],kind:"review",test:true,exerciseKind:"new-junction",label:"Relier les deux leçons"},
             ...session.steps.slice(session.index+1)];
       }
-      const alreadyComplete = pendingSurahs({...p, memo:before});
-      if ([...pendingSurahs(p)].some(id => !alreadyComplete.has(id)))
-        session.newSurahToCheck = true;
     }
   }
   stateSave();
@@ -2185,7 +2385,6 @@ async function advanceMastered() {
     forgetLesson(db, p.id);
     stateSave();
     const wasEnding = session.finishSurah;
-    const newSurahToCheck = session.newSurahToCheck;
     session = null;
     if (!wasEnding && finishSurahOffer(p)) {
       openFinishSurah(p);
@@ -2193,8 +2392,7 @@ async function advanceMastered() {
     }
     view = "home";
     render();
-    toast(newSurahToCheck ? "Sourate terminée. Va dans Programmes → Réciter à quelqu’un."
-      : wasEnding ? "Sourate terminée. Les révisions sont prévues." : "Séance terminée. Les révisions sont prévues.");
+    toast(wasEnding ? "Sourate terminée. Les révisions sont prévues." : "Séance terminée. Les révisions sont prévues.");
     return;
   }
   session.current = session.steps[session.index];
@@ -2202,6 +2400,7 @@ async function advanceMastered() {
   session.ratedPages = [];
   session.reviewStartedAt = Date.now();
   session.reviewAudioUsed = false;
+  session.pageRetries = 0;
   session.listened = 0;
   session.listenTarget = listeningGoal(p.memo.repeat);
   session.audioRunning = false;
@@ -2239,7 +2438,7 @@ async function recordPageRating(rating, source = "seul") {
     const ratedPages = [...(lesson.ratedPages || []), coverage.page];
     const nextPage = reviewPages().find(({page}) => !ratedPages.includes(page));
     const nextSheet = nextPage ? Math.max(0, readerSheets().findIndex(sheet => sheet.page === nextPage.page)) : reader.sheet;
-    const nextLesson = {...lesson, program: updated, pageReviewId: eventId, ratedPages,reviewStartedAt:Date.now(),reviewAudioUsed:false};
+    const nextLesson = {...lesson, program: updated, pageReviewId: eventId, ratedPages,reviewStartedAt:Date.now(),reviewAudioUsed:false,pageRetries:0};
     const nextDb = {...db, programs: db.programs.map(p => p.id === updated.id ? updated : p)};
     rememberLesson(nextDb, lessonCheckpoint(nextLesson, {...reader, sheet: nextSheet}, day()));
     save(nextDb);
@@ -2266,18 +2465,19 @@ function scrollToPageReview(coverage) {
 async function action(el) {
   if(el.dataset.guide){guide().action(el);return;}
   const a = el.dataset.action;
-  if (a === "confirm-surah-check" || a === "skip-surah-check") {
-    const programme = db.programs.find(p => p.id === el.dataset.id && p.corpus === "quran");
-    const surah = programme && surahChecks(programme).find(s => s.id === el.dataset.surah);
-    if (!surah) return;
-    const corrected = a === "confirm-surah-check";
-    if (!corrected && !confirm(`Ajouter ${surah.name} à l’entretien ? Tu pourras toujours la faire corriger plus tard.`)) return;
-    const updated = markSurahCheck(programme, surah.id, corrected ? "corrected" : "continue-alone", day());
-    const next = {...db, programs:db.programs.map(p => p === programme ? updated : p)};
-    save(next);
-    db = next;
+  if (a === "page-mastered") {
+    if (!session) return;
+    await recordPageRating(masteryRating({ retries: session.pageRetries, audioUsed: session.reviewAudioUsed }), "seul");
+    return;
+  }
+  if (a === "page-retry") {
+    if (!session) return;
+    stopPlayback();
+    await resetVoice();
+    session.pageRetries = (session.pageRetries || 0) + 1;
     render();
-    toast(corrected ? "Récitation marquée comme corrigée." : "Sourate ajoutée à l’entretien.");
+    if (session.corpus === "quran") scrollToPageReview(currentPageReview());
+    toast("On reprend depuis le début. Réécoute si besoin, puis récite à nouveau.");
     return;
   }
   if (a === "rate-page") {
@@ -2569,6 +2769,12 @@ async function action(el) {
     render();
     window.scrollTo(0, 0);
   }
+  if (a === "map-tab") {
+    mapTab = el.dataset.tab || "quran";
+    render();
+    window.scrollTo(0, 0);
+    return;
+  }
   if (a === "library-corpus") {
     libraryCorpus = el.dataset.corpus;
     search = "";
@@ -2593,12 +2799,6 @@ async function action(el) {
     render();
   }
   if (a === "open-section") await openReader(el.dataset.corpus, el.dataset.sid);
-  if (a === "open-unit") {
-    const c = el.dataset.corpus,
-      sid = el.dataset.id.split(":")[0],
-      index = section(c, sid).units.findIndex((u) => u.id === el.dataset.id);
-    await openReader(c, sid, index);
-  }
   if (a === "new") {
     guide().reset();
     editing = null;
@@ -2776,14 +2976,6 @@ async function action(el) {
     reader.reveal = !reader.reveal;
     render();
   }
-  if (a === "bookmark") {
-    const key = currentCorpus() + "/" + currentUnits()[0].id;
-    db.bookmarks = db.bookmarks.includes(key)
-      ? db.bookmarks.filter((k) => k !== key)
-      : [...db.bookmarks, key];
-    stateSave();
-    render();
-  }
   if (a === "add-listen") {
     if (!session) return;
     session.listenTarget = addListeningRound(
@@ -2929,6 +3121,7 @@ async function action(el) {
         maxDuration: session?.current.kind === "review" ? 600000 : 120000,
       });
       voice.status = "listening";
+      rememberMicUse();
       updateVoiceDOM();
     } catch (e) {
       voice.status = "error";
@@ -2996,6 +3189,10 @@ async function action(el) {
       el.textContent = "Télécharger les audios";
     }
   }
+  if (a === "offline-info") {
+    toast("Sakina est prête hors connexion. Pour le Coran, télécharge les audios depuis la lecture.");
+    return;
+  }
   if (a === "offline") await prepareOffline(el);
   if (a === "export") {
     const blob = URL.createObjectURL(
@@ -3043,14 +3240,14 @@ async function checkOffline() {
   } catch {
     offlineReady = false;
   }
-  if (view === "home") render();
+  if (BADGE_VIEWS.includes(view)) render();
   return offlineReady;
 }
 async function prepareOffline(el) {
   if (offlineBusy || !("caches" in globalThis)) return;
   offlineBusy = true;
   if (el) el.disabled = true;
-  if (view === "home" || view === "settings") render();
+  if (BADGE_VIEWS.includes(view)) render();
   try {
     if ("serviceWorker" in navigator)
       await Promise.race([
@@ -3067,6 +3264,7 @@ async function prepareOffline(el) {
       const progress = document.querySelector("#offline-progress");
       if (progress)
         progress.textContent = `${downloaded} téléchargés · ${reused} conservés`;
+      updateOfflineBadge();
     });
     offlineReady = true;
     await navigator.storage?.persist?.().catch(() => {});
@@ -3079,9 +3277,12 @@ async function prepareOffline(el) {
   } finally {
     offlineBusy = false;
     if (el?.isConnected) el.disabled = false;
-    if (view === "home" || view === "settings") render();
+    if (BADGE_VIEWS.includes(view)) render();
   }
 }
+// The goal trail is measured from the layout, so redraw it when the layout changes.
+window.addEventListener("resize", () => { if (view === "home") drawGoalPath(root); });
+document.fonts?.ready.then(() => { if (view === "home") drawGoalPath(root); });
 window.addEventListener("online", () => {
   if (!offlineReady && !offlineBusy) void prepareOffline();
 });

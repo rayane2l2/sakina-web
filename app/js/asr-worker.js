@@ -1,6 +1,6 @@
 /* Local inference worker. The official ReciteQuran sherpa runtime is unmodified. */
 
-let ready, recognizer, stream, generation=0;
+let ready, recognizer, stream, generation=0, lastText='';
 
 var Module = {
 
@@ -67,7 +67,13 @@ async function init(modelId='v3.1') {
 
 }
 
-function result(final=false){const r=recognizer.getResult(stream);postMessage({type:'result',...r,final,id:generation});}
+// Every chunk is acknowledged (the page paces its microphone on it), but the decoded text
+// only crosses threads when it changed: the page then redraws far less often.
+function result(final=false){
+ const r=recognizer.getResult(stream),text=r.text||'';
+ if(!final&&text===lastText){postMessage({type:'tick',id:generation});return;}
+ lastText=text;postMessage({type:'result',...r,final,id:generation});
+}
 
 self.onmessage=async({data})=>{
 
@@ -77,15 +83,16 @@ self.onmessage=async({data})=>{
 
   if(data.type==='reset'){
 
-   await init();generation=data.id;stream?.free();stream=recognizer.createStream();
+   await init();generation=data.id;lastText='';stream?.free();stream=recognizer.createStream();
 
    stream.acceptWaveform(16000,new Float32Array(4800));return;
 
   }
 
-  if(data.type==='cancel'){generation=data.id;stream?.free();stream=null;return;}
+  if(data.type==='cancel'){generation=data.id;lastText='';stream?.free();stream=null;return;}
 
-  if(data.type==='audio'&&stream&&data.id===generation){
+  if(data.type==='audio'&&!(stream&&data.id===generation)){postMessage({type:'tick',id:data.id});return;}
+  if(data.type==='audio'){
 
    stream.acceptWaveform(data.rate,new Float32Array(data.samples));
 
